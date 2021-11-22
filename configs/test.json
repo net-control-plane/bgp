@@ -1,0 +1,25 @@
+{
+	"identifier": "193.36.105.196",
+	"asn": 210036,
+	"hold_time": 180,
+	"http_addr": "[::]:9179",
+	"listen_addrs": [
+		"[::]:1790"
+	],
+	"peers": [
+		{
+			"name": "sample_peer",
+			"ip": "2a0d:d740:105:0:af9d:7b05:a881:2e91",
+			"asn": 210036,
+			"afi": "Ipv4",
+			"safi": "Unicast",
+			"local_pref": 100,
+			"announcements": [
+				{
+					"prefix": "2001:db8::/32",
+					"nexthop": "2a0d:d740:105:0:af9d:7b05:a881:2e91"
+				}
+			]
+		}
+	]
+}
