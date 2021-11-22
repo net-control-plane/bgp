@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    "bgpd",
+    "netlink",
+
+    # Tests
+    "tests/integration_tests"
+]

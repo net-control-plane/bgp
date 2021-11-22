@@ -1,0 +1,90 @@
+{
+	"identifier": "193.36.105.1",
+	"asn": 210036,
+	"hold_time": 180,
+	"listen_addrs": [
+		"[::]:179"
+	],
+	"peers": [
+		{
+			"name": "iway_rs1_ipv6",
+			"ip": "2001:8e0:9ff:2000::1",
+			"asn": 8758,
+			"afi": 2,
+			"safi": 1,
+			"local_pref": 100,
+			"announcements": [
+				{
+					"prefix": "2a0d:d740::/48",
+					"nexthop": "2001:8e0:9ff:2000::5396:2b41",
+					"large_communities": ["210036:10:1"]
+				},
+				{
+					"prefix": "2a0d:d740:105::/48",
+					"nexthop": "2001:8e0:9ff:2000::5396:2b41",
+					"large_communities": ["210036:10:1"]
+				}
+			]
+		},
+		{
+			"name": "iway_rs2_ipv6",
+			"ip": "2001:8e0:ffff:3::42",
+			"asn": 8758,
+			"afi": 2,
+			"safi": 1,
+			"local_pref": 200,
+			"announcements": [
+				{
+					"prefix": "2a0d:d740::/48",
+					"nexthop": "2001:8e0:9ff:2000::5396:2b41",
+					"large_communities": ["210036:10:1"]
+				},
+				{
+					"prefix": "2a0d:d740:105::/48",
+					"nexthop": "2001:8e0:9ff:2000::5396:2b41",
+					"large_communities": ["210036:10:1"]
+				}
+			]
+		},
+		{
+			"name": "iway_rs3_ipv6",
+			"ip": "2001:8e0:ffff:3::72",
+			"asn": 8758,
+			"afi": 2,
+			"safi": 1,
+			"local_pref": 200,
+			"announcements": [
+				{
+					"prefix": "2a0d:d740::/48",
+					"nexthop": "2001:8e0:9ff:2000::5396:2b41",
+					"large_communities": ["210036:10:1"]
+				},
+				{
+					"prefix": "2a0d:d740:105::/48",
+					"nexthop": "2001:8e0:9ff:2000::5396:2b41",
+					"large_communities": ["210036:10:1"]
+				}
+			]
+		},
+		{
+			"name": "iway_rs1_ipv4",
+			"ip": "::ffff:83.150.40.2",
+			"asn": 8758,
+			"afi": 1,
+			"safi": 1,
+			"local_pref": 100,
+			"announcements": [
+				{
+					"prefix": "193.36.104.0/24",
+					"nexthop": "83.150.43.65",
+					"large_communities": ["210036:10:1"]
+				},
+				{
+					"prefix": "193.36.105.0/24",
+					"nexthop": "83.150.43.65",
+					"large_communities": ["210036:10:1"]
+				}
+			]
+		}
+	]
+}
