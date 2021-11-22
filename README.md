@@ -1,6 +1,6 @@
-# BGPd
+# BGP
 
-BGPd implements a Border Gateway Protocol speaker as defined in RFC4271 (not specification compliant yet, see status below), and provides programmatic access to the routes learned by the server.
+This project implements a Border Gateway Protocol speaker as defined in RFC4271 (not specification compliant yet, see status below), and provides programmatic access to the routes learned by the server.
 
 The aim of the project is to provide a fully programatic interface for configuring, filtering, and exporting routes from the server to other peers and to the forwarding plane. 
 
