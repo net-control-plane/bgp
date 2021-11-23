@@ -49,8 +49,8 @@ impl RouteServer {
     async fn get_streaming_receiver<A>(
         &self,
         manager: UnboundedSender<RouteManagerCommands<A>>,
-    ) -> Result<broadcast::Receiver<rib_manager::PathSet<A>>, Status> {
-        let (tx, rx) = oneshot::channel::<broadcast::Receiver<rib_manager::PathSet<A>>>();
+    ) -> Result<broadcast::Receiver<(u64, rib_manager::PathSet<A>)>, Status> {
+        let (tx, rx) = oneshot::channel::<broadcast::Receiver<(u64, rib_manager::PathSet<A>)>>();
         if let Err(e) = manager.send(RouteManagerCommands::StreamRib(tx)) {
             warn!("Failed to send StreamRib command to route manager: {}", e);
             return Err(tonic::Status::internal(
@@ -61,17 +61,20 @@ impl RouteServer {
         rx.await.map_err(|e| tonic::Status::internal(e.to_string()))
     }
 
-    fn transform_pathset<A>(mgr_ps: rib_manager::PathSet<A>, address_family: i32) -> PathSet {
+    fn transform_pathset<A>(
+        mgr_ps: (u64, rib_manager::PathSet<A>),
+        address_family: i32,
+    ) -> PathSet {
         let mut proto_pathset = PathSet {
-            epoch: 0,
+            epoch: mgr_ps.0,
             prefix: Some(Prefix {
-                ip_prefix: mgr_ps.nlri.prefix,
-                prefix_len: mgr_ps.nlri.prefixlen.into(),
+                ip_prefix: mgr_ps.1.nlri.prefix,
+                prefix_len: mgr_ps.1.nlri.prefixlen.into(),
                 address_family,
             }),
             paths: vec![],
         };
-        for (_, path) in mgr_ps.paths {
+        for (_, path) in mgr_ps.1.paths {
             let proto_path = Path {
                 as_path: path.as_path,
                 local_pref: path.local_pref,

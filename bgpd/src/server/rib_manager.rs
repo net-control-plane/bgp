@@ -93,7 +93,7 @@ pub struct RibSnapshot<A> {
 pub enum RouteManagerCommands<A> {
     Update(RouteUpdate),
     DumpRib(oneshot::Sender<RibSnapshot<A>>),
-    StreamRib(oneshot::Sender<broadcast::Receiver<PathSet<A>>>),
+    StreamRib(oneshot::Sender<broadcast::Receiver<(u64, PathSet<A>)>>),
 }
 
 pub struct RibManager<A: Address> {
@@ -105,7 +105,7 @@ pub struct RibManager<A: Address> {
     epoch: u64,
 
     // Handle for streaming updates to PathSets in the RIB.
-    pathset_streaming_handle: broadcast::Sender<PathSet<A>>,
+    pathset_streaming_handle: broadcast::Sender<(u64, PathSet<A>)>,
 
     shutdown: broadcast::Receiver<()>,
 }
@@ -176,7 +176,7 @@ where
         info!("Done RIB dump");
     }
 
-    fn stream_rib(&mut self, sender: oneshot::Sender<broadcast::Receiver<PathSet<A>>>) {
+    fn stream_rib(&mut self, sender: oneshot::Sender<broadcast::Receiver<(u64, PathSet<A>)>>) {
         let subscriber = self.pathset_streaming_handle.subscribe();
         if let Err(_) = sender.send(subscriber) {
             warn!("Failed to send subscriber in stream_rib");
@@ -231,7 +231,9 @@ where
                 // BTreeMap is already sorted.
 
                 // Ignore errors sending due to no active receivers on the channel.
-                let _ = self.pathset_streaming_handle.send(path_set.clone());
+                let _ = self
+                    .pathset_streaming_handle
+                    .send((self.epoch, path_set.clone()));
             } else {
                 // This prefix has never been seen before, so add a new PathSet for it.
                 let mut path_set = PathSet::<A> {
@@ -253,7 +255,7 @@ where
                     .insert(addr, prefixlen.into(), Mutex::new(path_set.clone()));
 
                 // Ignore errors sending due to no active receivers on the channel.
-                let _ = self.pathset_streaming_handle.send(path_set);
+                let _ = self.pathset_streaming_handle.send((self.epoch, path_set));
             }
         }
 
@@ -275,7 +277,9 @@ where
                     );
                 }
                 // Ignore errors sending due to no active receivers on the channel.
-                let _ = self.pathset_streaming_handle.send(path_set.clone());
+                let _ = self
+                    .pathset_streaming_handle
+                    .send((self.epoch, path_set.clone()));
                 if path_set.paths.is_empty() {
                     pathset_empty = true;
                 }
