@@ -22,7 +22,7 @@ The server logic is contained in `bgpd/src/server` and is split roughly in the f
 
 The current state of the code is a barely functional proof of concept. Rayhaan uses this daemon at home for his home network, AS210036, but apart from the basic functionality of connecting to a peer, announcing a static set of routes, and streaming received routes out via gRPC, it does not do much more.
 
-There are an abundance of opportunities to contribute to the project, to make it fully standards compliant, and achieve the goals of full programmability. If you are interested please reach out to `rayhaan (at rayhaan (with ccTLD ch))``.
+There are an abundance of opportunities to contribute to the project, to make it fully standards compliant, and achieve the goals of full programmability. If you are interested please reach out to `rayhaan (at rayhaan (with ccTLD ch))`.
 
 ### RFCs
 
