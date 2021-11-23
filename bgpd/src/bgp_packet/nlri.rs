@@ -39,6 +39,27 @@ pub struct NLRI {
     pub prefix: Vec<u8>,
 }
 
+impl NLRI {
+    pub fn from_bytes(
+        afi: AddressFamilyIdentifier,
+        prefix: Vec<u8>,
+        prefixlen: u8,
+    ) -> Result<Self, String> {
+        // Check that the vector has enough bytes to represent the prefix.
+        if prefix.len() < ((prefixlen + 7) / 8).into() {
+            return Err(format!(
+                "Prefix: {:?}/{} does not have enough bytes in prefix for given prefixlen",
+                prefix, prefixlen
+            ));
+        }
+        Ok(NLRI {
+            afi,
+            prefixlen,
+            prefix,
+        })
+    }
+}
+
 impl ReadablePacket for NLRI {
     fn from_wire<'a>(
         ctx: &ParserContext,

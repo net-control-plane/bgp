@@ -12,6 +12,10 @@ path = "src/main.rs"
 name = "route_client"
 path = "src/route_client/main.rs"
 
+[[bin]]
+name = "streamer_cli"
+path = "src/streamer_cli/main.rs"
+
 [dependencies]
 byteorder = "1.4.3"
 bytes = "1.*"
