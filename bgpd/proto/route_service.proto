@@ -61,7 +61,7 @@ message DumpPathsResponse {
 service RouteService {
 	// DumpPaths returns all the paths currently in the RIB.
 	rpc DumpPaths(DumpPathsRequest) returns (DumpPathsResponse);
-	// StreamPaths starts streaming updates to the RIB.
+	// StreamPaths dumps the existing routes and starts streaming updates to the RIB.
 	rpc StreamPaths(StreamPathsRequest) returns (stream PathSet);
 }
 

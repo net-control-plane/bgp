@@ -34,83 +34,6 @@ fn vec_to_array<T, const N: usize>(v: Vec<T>) -> Result<[T; N], String> {
     v.try_into().map_err(|_| "Wrong size of Vec".to_string())
 }
 
-// Configuration of route_client
-
-// NorthboundInterface represents a source of control plane routing data.
-// Currently this is hardcoded to be a gRPC endpoint, but in the future
-// more interfaces can be implemented.
-struct NorthboundInterfaceConfig {
-    name: String,
-    grpc_endpoint: String,
-    address_family: u16,
-}
-
-// SouthboundInterface represents a sink for installing routes into.
-// Currently this is hardcoded to be the Kernel Netlink connector, but
-// in the future more interfaces can be implemented.
-struct SouthboundInterfaceConfig {
-    name: String,
-    rt_table: u16,
-    address_family: u16,
-}
-
-struct RouteClientConfig {
-    northbounds: Vec<NorthboundInterfaceConfig>,
-    southbounds: Vec<SouthboundInterfaceConfig>,
-}
-
-type SouthboundSink = tokio::sync::mpsc::Sender<SouthboundCommands>;
-
-enum SouthboundCommands {
-    RouteUpdate(PathSet),
-    Reset(),
-}
-
-/// NorthboundConnector implements the interface that gets routes from
-/// the northbound route source, and sends it into the southbound sink,
-/// implementing graceful connection handling, flushing routes out and
-/// reinserting them on reconnection.
-struct NorthboundConnector {
-    config: NorthboundInterfaceConfig,
-    sink: SouthboundSink,
-}
-
-impl NorthboundConnector {
-    async fn run(&self) -> Result<(), String> {
-        let endpoint = Endpoint::from_shared(self.config.grpc_endpoint.clone())
-            .map_err(|e| e.to_string())?
-            .keep_alive_timeout(Duration::from_secs(10));
-        let mut client = RouteServiceClient::connect(endpoint)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        // 1. First subscribe to the route feed and put these into an unbounded channel.
-        let (stream_tx, stream_rx) = tokio::sync::mpsc::unbounded_channel::<PathSet>();
-        let request = StreamPathsRequest {
-            address_family: self.config.address_family as i32,
-        };
-        let recv_handle: JoinHandle<Result<(), String>> = tokio::spawn(async move {
-            let mut rpc_stream = client
-                .stream_paths(request)
-                .await
-                .map_err(|e| e.to_string())?
-                .into_inner();
-            while let Some(route) = rpc_stream.message().await.map_err(|e| e.to_string())? {
-                stream_tx.send(route).map_err(|e| e.to_string())?;
-            }
-            Err("Stream closed".to_string())
-        });
-
-        // 2. Dump the entire RIB and put these into another structure.
-
-        // 3. Drop all the entries in the deque with an epoch < dump epoch.
-
-        // 4. Stream all routes into the sink from here on out.
-
-        Err("Connection dropped to northbound".to_string())
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _init_log = stderrlog::new()
@@ -138,13 +61,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let request = StreamPathsRequest { address_family: 2 };
         let mut stream = client.stream_paths(request).await?.into_inner();
 
+        let mut msg_ctr: u32 = 0;
+
         while let Some(route) = stream.message().await? {
             let nlri = NLRI {
                 afi: address_family_identifier_values::IPV6,
                 prefixlen: route.prefix.as_ref().unwrap().prefix_len as u8,
                 prefix: route.prefix.as_ref().unwrap().ip_prefix.clone(),
             };
-            print!("Update for: {} ", nlri);
+
+            print!("Update {} for: {} ", msg_ctr, nlri);
+            msg_ctr += 1;
 
             if route.paths.len() > 0 {
                 // Install the best route
@@ -168,6 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     _ => {}
                 }
             }
+
             println!("Number of paths: {}", route.paths.len());
             for path in &route.paths {
                 // TODO: have a proper error here not unwrap.

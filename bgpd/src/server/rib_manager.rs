@@ -38,6 +38,10 @@ use super::data_structures::RouteWithdraw;
 
 type PeerInterface = mpsc::UnboundedSender<PeerCommands>;
 
+/// Path is a structure to contain a specific route via one nexthop.
+/// Note that currently there is an assumption that there is only
+/// one route per peer per prefix, but when ADD-PATH support is added
+/// this will no longer hold true.
 #[derive(Debug, Clone, Serialize)]
 pub struct Path {
     pub nexthop: Vec<u8>,
@@ -92,8 +96,13 @@ pub struct RibSnapshot<A> {
 
 pub enum RouteManagerCommands<A> {
     Update(RouteUpdate),
+    /// DumpRib returns the view of the RIB at the current epoch.
     DumpRib(oneshot::Sender<RibSnapshot<A>>),
-    StreamRib(oneshot::Sender<broadcast::Receiver<(u64, PathSet<A>)>>),
+    /// StreamRib will send all the routes currently in the RIB then stream updates.
+    StreamRib(
+        mpsc::UnboundedSender<(u64, PathSet<A>)>,
+        oneshot::Sender<broadcast::Receiver<(u64, PathSet<A>)>>,
+    ),
 }
 
 pub struct RibManager<A: Address> {
@@ -147,8 +156,8 @@ where
                     RouteManagerCommands::DumpRib(sender) => {
                         self.dump_rib(sender);
                     }
-                    RouteManagerCommands::StreamRib(sender) => {
-                        self.stream_rib(sender);
+                    RouteManagerCommands::StreamRib(dump_sender, stream_sender) => {
+                        self.stream_rib(dump_sender, stream_sender);
                     }
                 },
                 None => {
@@ -176,9 +185,21 @@ where
         info!("Done RIB dump");
     }
 
-    fn stream_rib(&mut self, sender: oneshot::Sender<broadcast::Receiver<(u64, PathSet<A>)>>) {
+    /// stream_rib sends the current routes in the RIB back via dump_chan then closes it,
+    /// and subsequently returns a broadcast::Receiver for streaming updates.
+    fn stream_rib(
+        &mut self,
+        dump_sender: mpsc::UnboundedSender<(u64, PathSet<A>)>,
+        stream_sender: oneshot::Sender<broadcast::Receiver<(u64, PathSet<A>)>>,
+    ) {
+        // Send all the routes currently in the RIB.
+        for pathset in self.rib.iter() {
+            dump_sender.send((self.epoch, pathset.2.lock().unwrap().clone()));
+        }
+        drop(dump_sender);
+        // Create a new subscriber and return that to the caller to be notified of updates.
         let subscriber = self.pathset_streaming_handle.subscribe();
-        if let Err(_) = sender.send(subscriber) {
+        if let Err(_) = stream_sender.send(subscriber) {
             warn!("Failed to send subscriber in stream_rib");
         }
     }

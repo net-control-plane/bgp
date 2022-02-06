@@ -59,6 +59,7 @@ use tokio::net::tcp;
 use tokio::net::TcpStream;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::codec::{Decoder, Encoder};
@@ -121,6 +122,10 @@ pub enum PeerCommands {
     MessageFromPeer(BGPSubmessage),
 
     TimerEvent(PeerTimerEvent),
+
+    // Adds a community to all announcements.
+    AddLargeCommunity((u32, u32), oneshot::Sender<String>),
+    RemoveLargeCommunity((u32, u32), oneshot::Sender<String>),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -484,6 +489,48 @@ where
             PeerCommands::Announce(_) => {
                 todo!();
             }
+
+            PeerCommands::AddLargeCommunity(c, sender) => {
+                for mut a in self.config.announcements.iter_mut() {
+                    if let Some(lcs) = a.large_communities.as_mut() {
+                        lcs.push(format!("{}:{}:{}", self.config.asn, c.0, c.1));
+                    } else {
+                        a.large_communities =
+                            Some(vec![format!("{}:{}:{}", self.config.asn, c.0, c.1)]);
+                    }
+                }
+                for a in &self.config.announcements.clone() {
+                    if let Err(e) = self.announce_static(&a).await {
+                        if let Err(se) = sender.send(e) {
+                            warn!("Failed to send to sender: {}", se);
+                        }
+                        return Ok(());
+                    }
+                }
+                if let Err(se) = sender.send("Ok".to_string()) {
+                    warn!("Failed to send to sender: {}", se);
+                }
+            }
+            PeerCommands::RemoveLargeCommunity(c, sender) => {
+                let communities_str = format!("{}:{}:{}", self.config.asn, c.0, c.1);
+                for a in self.config.announcements.iter_mut() {
+                    if let Some(lcs) = a.large_communities.as_mut() {
+                        lcs.retain(|e| *e != communities_str);
+                    }
+                }
+                for a in &self.config.announcements.clone() {
+                    if let Err(e) = self.announce_static(&a).await {
+                        if let Err(se) = sender.send(e) {
+                            warn!("Failed to send to sender: {}", se);
+                        }
+                        return Ok(());
+                    }
+                }
+                if let Err(se) = sender.send("Ok".to_string()) {
+                    warn!("Failed to send to sender: {}", se);
+                }
+            }
+
             PeerCommands::MessageFromPeer(msg) => match self.handle_msg(msg).await {
                 Ok(_) => {
                     // Update the last time counter

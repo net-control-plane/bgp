@@ -14,6 +14,7 @@
 
 use crate::bgp_packet::constants::address_family_identifier_values;
 use crate::bgp_packet::constants::AddressFamilyIdentifier;
+use crate::server::peer::PeerCommands;
 use crate::server::rib_manager;
 use crate::server::rib_manager::RibSnapshot;
 use crate::server::rib_manager::RouteManagerCommands;
@@ -26,6 +27,7 @@ use crate::server::route_server::route_server::PathSet;
 use crate::server::route_server::route_server::Prefix;
 use crate::server::route_server::route_server::StreamPathsRequest;
 use log::warn;
+use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use tokio::sync::broadcast;
@@ -43,24 +45,33 @@ pub mod route_server {
 pub struct RouteServer {
     pub ip4_manager: UnboundedSender<RouteManagerCommands<Ipv4Addr>>,
     pub ip6_manager: UnboundedSender<RouteManagerCommands<Ipv6Addr>>,
+
+    pub peer_state_machines: HashMap<String, UnboundedSender<PeerCommands>>,
 }
 
 impl RouteServer {
     async fn get_streaming_receiver<A>(
         &self,
         manager: UnboundedSender<RouteManagerCommands<A>>,
+        // dump_tx is used to receive the current state before streaming starts.
+        dump_tx: UnboundedSender<(u64, rib_manager::PathSet<A>)>,
     ) -> Result<broadcast::Receiver<(u64, rib_manager::PathSet<A>)>, Status> {
-        let (tx, rx) = oneshot::channel::<broadcast::Receiver<(u64, rib_manager::PathSet<A>)>>();
-        if let Err(e) = manager.send(RouteManagerCommands::StreamRib(tx)) {
+        let (stream_tx, stream_rx) =
+            oneshot::channel::<broadcast::Receiver<(u64, rib_manager::PathSet<A>)>>();
+        if let Err(e) = manager.send(RouteManagerCommands::StreamRib(dump_tx, stream_tx)) {
             warn!("Failed to send StreamRib command to route manager: {}", e);
             return Err(tonic::Status::internal(
                 "failed to communicate with route manager".to_owned(),
             ));
         }
 
-        rx.await.map_err(|e| tonic::Status::internal(e.to_string()))
+        stream_rx
+            .await
+            .map_err(|e| tonic::Status::internal(e.to_string()))
     }
 
+    /// Converts a rib_manager::PathSet into the proto format PathSet using the
+    /// appropriate address family.
     fn transform_pathset<A>(
         mgr_ps: (u64, rib_manager::PathSet<A>),
         address_family: i32,
@@ -201,13 +212,24 @@ impl RouteService for RouteServer {
     ) -> Result<Response<Self::StreamPathsStream>, Status> {
         match request.get_ref().address_family {
             1 => {
+                let (dump_tx, mut dump_rx) = mpsc::unbounded_channel();
                 let mut receiver = self
-                    .get_streaming_receiver::<Ipv4Addr>(self.ip4_manager.clone())
+                    .get_streaming_receiver::<Ipv4Addr>(self.ip4_manager.clone(), dump_tx)
                     .await?;
 
                 let (tx, rx) = mpsc::channel(10_000);
                 // Spawn a task for receving values from the manager and send them to the peer.
                 tokio::spawn(async move {
+                    // Consume the dump before moving to the streamed paths.
+                    while let Some(next) = dump_rx.recv().await {
+                        let pathset =
+                            RouteServer::transform_pathset(next, AddressFamily::IPv4.into());
+                        if let Err(e) = tx.send(Ok(pathset)).await {
+                            warn!("Failed to send path to peer: {}", e);
+                            return;
+                        }
+                    }
+
                     loop {
                         let next = receiver.recv().await;
                         if let Err(e) = next {
@@ -237,13 +259,23 @@ impl RouteService for RouteServer {
                 return Ok(Response::new(ReceiverStream::new(rx)));
             }
             2 => {
+                let (dump_tx, mut dump_rx) = mpsc::unbounded_channel();
                 let mut receiver = self
-                    .get_streaming_receiver::<Ipv6Addr>(self.ip6_manager.clone())
+                    .get_streaming_receiver::<Ipv6Addr>(self.ip6_manager.clone(), dump_tx)
                     .await?;
 
                 let (tx, rx) = mpsc::channel(10_000);
                 // Spawn a task for receving values from the manager and send them to the peer.
                 tokio::spawn(async move {
+                    // Consume the dump before moving to the streamed paths.
+                    while let Some(next) = dump_rx.recv().await {
+                        let pathset =
+                            RouteServer::transform_pathset(next, AddressFamily::IPv4.into());
+                        if let Err(e) = tx.send(Ok(pathset)).await {
+                            warn!("Failed to send path to peer: {}", e);
+                            return;
+                        }
+                    }
                     loop {
                         let next = receiver.recv().await;
                         if let Err(e) = next {

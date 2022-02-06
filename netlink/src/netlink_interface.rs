@@ -162,6 +162,12 @@ impl NetlinkInterface {
                     bytes_read
                 ))));
             }
+            println!(
+                "bytes_read: {} (usz) {}, cap: {}",
+                bytes_read,
+                (bytes_read as usize),
+                self.buf.capacity()
+            );
             self.buf.set_len(bytes_read as usize);
         }
 

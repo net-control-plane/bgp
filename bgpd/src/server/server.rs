@@ -95,6 +95,7 @@ async fn socket_listener(
 async fn start_http_server(
     manager4: UnboundedSender<RouteManagerCommands<Ipv4Addr>>,
     manager6: UnboundedSender<RouteManagerCommands<Ipv6Addr>>,
+    peers: HashMap<String, UnboundedSender<PeerCommands>>,
     listen_addr: SocketAddr,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<tokio::task::JoinHandle<()>, String> {
@@ -116,6 +117,73 @@ async fn start_http_server(
         }
     }
 
+    async fn rm_large_community(
+        chan: UnboundedSender<PeerCommands>,
+        ld1: u32,
+        ld2: u32,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+        if let Err(e) = chan.send(PeerCommands::RemoveLargeCommunity((ld1, ld2), tx)) {
+            warn!("Failed to send RemoveLargeCommunity request: {}", e);
+            return Err(warp::reject());
+        }
+
+        match rx.await {
+            Ok(result) => Ok(warp::reply::json(&result)),
+            Err(e) => {
+                warn!(
+                    "RemoveLargeCommunity response from peer state machine: {}",
+                    e
+                );
+                Err(warp::reject())
+            }
+        }
+    }
+
+    async fn add_large_community(
+        chan: UnboundedSender<PeerCommands>,
+        ld1: u32,
+        ld2: u32,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+        if let Err(e) = chan.send(PeerCommands::AddLargeCommunity((ld1, ld2), tx)) {
+            warn!("Failed to send AddLargeCommunity request: {}", e);
+            return Err(warp::reject());
+        }
+
+        match rx.await {
+            Ok(result) => Ok(warp::reply::json(&result)),
+            Err(e) => {
+                warn!("AddLargeCommunity response from peer state machine: {}", e);
+                Err(warp::reject())
+            }
+        }
+    }
+
+    async fn modify_community_fn(
+        add: bool,
+        peers: HashMap<String, UnboundedSender<PeerCommands>>,
+        name: String,
+        ld1: u32,
+        ld2: u32,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        if let Some(chan) = peers.get(&name) {
+            if let Err(e) = func(chan.clone(), ld1, ld2).await {
+                warn!("Failed to add large community: {:?}", e);
+                return Err(warp::reject());
+            }
+        } else {
+            return Err(warp::reject());
+        }
+        Ok(warp::reply::with_status("Ok", warp::http::StatusCode::OK))
+    }
+
+    let add_community_filter = warp::post()
+        .map(move || true)
+        .and(warp::path::param())
+        .and(warp::path!(u32 / u32))
+        .and_then(modify_community_fn);
+
     // Start the web server that has access to the rib managers so that it can expose the state.
     let v4_mgr_filter = warp::any().map(move || manager4.clone());
 
@@ -135,7 +203,7 @@ async fn start_http_server(
         .and(v6_mgr_filter)
         .and_then(manager_get_routes_handler);
 
-    let routes = warp_v4_routes.or(warp_v6_routes);
+    let routes = warp_v4_routes.or(warp_v6_routes).or(add_community_filter);
     let (_, server) = warp::serve(routes)
         .try_bind_with_graceful_shutdown(listen_addr, async move {
             shutdown.recv().await.ok();
@@ -232,40 +300,6 @@ impl Server {
             }
         });
 
-        // Start the HTTP server for debugging access.
-        if let Some(http_addr) = &self.config.http_addr {
-            let addr = http_addr.parse().unwrap();
-            start_http_server(
-                rp4_tx.clone(),
-                rp6_tx.clone(),
-                addr,
-                self.shutdown.subscribe(),
-            )
-            .await
-            .unwrap();
-        }
-
-        // Start the gRPC server for streaming the RIB.
-        if let Some(grpc_addr) = &self.config.grpc_addr {
-            let addr = grpc_addr.parse().unwrap();
-            info!("Running gRPC RouteService on {}", addr);
-            let rs = route_server::RouteServer {
-                ip4_manager: rp4_tx.clone(),
-                ip6_manager: rp6_tx.clone(),
-            };
-
-            let svc = RouteServiceServer::new(rs);
-            tokio::spawn(async move {
-                if let Err(e) = tonic::transport::Server::builder()
-                    .add_service(svc)
-                    .serve(addr)
-                    .await
-                {
-                    warn!("Failed to run gRPC server: {}", e);
-                }
-            });
-        }
-
         // Start a PeerStateMachine for every peer that is configured and store its channel so that
         // we can communicate with it.
 
@@ -307,6 +341,47 @@ impl Server {
             }
 
             peer_statemachines.insert(peer_config.name.clone(), (peer_config.clone(), psm_tx));
+        }
+
+        let mut peer_chan_map: HashMap<String, UnboundedSender<PeerCommands>> = HashMap::new();
+        for (k, v) in &peer_statemachines {
+            peer_chan_map.insert(k.to_string(), v.1.clone());
+        }
+
+        // Start the HTTP server for debugging access.
+        if let Some(http_addr) = &self.config.http_addr {
+            let addr = http_addr.parse().unwrap();
+            start_http_server(
+                rp4_tx.clone(),
+                rp6_tx.clone(),
+                peer_chan_map.clone(),
+                addr,
+                self.shutdown.subscribe(),
+            )
+            .await
+            .unwrap();
+        }
+
+        // Start the gRPC server for streaming the RIB.
+        if let Some(grpc_addr) = &self.config.grpc_addr {
+            let addr = grpc_addr.parse().unwrap();
+            info!("Running gRPC RouteService on {}", addr);
+            let rs = route_server::RouteServer {
+                ip4_manager: rp4_tx.clone(),
+                ip6_manager: rp6_tx.clone(),
+                peer_state_machines: peer_chan_map,
+            };
+
+            let svc = RouteServiceServer::new(rs);
+            tokio::spawn(async move {
+                if let Err(e) = tonic::transport::Server::builder()
+                    .add_service(svc)
+                    .serve(addr)
+                    .await
+                {
+                    warn!("Failed to run gRPC server: {}", e);
+                }
+            });
         }
 
         // Event loop for processing inbound connections.
