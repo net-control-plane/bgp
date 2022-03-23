@@ -1,6 +1,6 @@
 # BGP
 
-This project implements a Border Gateway Protocol speaker as defined in RFC4271 (not specification compliant yet, see status below), and provides programmatic access to the routes learned by the server.
+This project implements a Border Gateway Protocol speaker as defined in [RFC4271](https://datatracker.ietf.org/doc/html/rfc4271) (not specification compliant yet, see status below), and provides programmatic access to the routes learned by the server.
 
 The aim of the project is to provide a fully programatic interface for configuring, filtering, and exporting routes from the server to other peers and to the forwarding plane. 
 
@@ -34,6 +34,24 @@ The following are the RFCs that were consulted during the writing of the daemon 
 	- Multiprotocol extensions for BGP4
 * RFC4693 - https://datatracker.ietf.org/doc/html/rfc6793
 	- 4 byte ASNs
+	
+#### RFC repository
+
+Here's a list of interesting RFCs that we should look at eventually:
+
+* RFC8212 - https://datatracker.ietf.org/doc/html/rfc8212
+	- Default External BGP (EBGP) Route Propagation Behavior without Policies
+
+### TODOs
+
+A very rough sketch of some major TODOs:
+
+* Get `route_client` into a state where it actually works
+* Support forwarding routes to other peers
+* Implement filters comprehensively and design an API for setting them
+* Implement programatic control plane via gRPC
+* RPKI integration
+* Design and implement monitoring interfaces
 
 ## Disclaimer
 
