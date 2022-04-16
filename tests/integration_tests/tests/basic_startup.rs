@@ -13,8 +13,7 @@
 // limitations under the License.
 
 use bgpd::bgp_packet;
-use bgpd::bgp_packet::constants::address_family_identifier_values;
-use bgpd::bgp_packet::constants::subsequent_address_family_identifier_values;
+use bgpd::bgp_packet::constants::{AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier};
 use bgpd::bgp_packet::messages::BGPSubmessage;
 use bgpd::bgp_packet::traits::ParserContext;
 use bgpd::server::bgp_server::Server;
@@ -114,8 +113,8 @@ async fn test_bgp_listener_known_peer() {
         http_addr: None,
         listen_addrs: vec!["[::]:9179".to_owned()],
         peers: vec![PeerConfig {
-            afi: address_family_identifier_values::IPV6,
-            safi: subsequent_address_family_identifier_values::UNICAST,
+            afi: AddressFamilyIdentifier::Ipv6,
+            safi: SubsequentAddressFamilyIdentifier::Unicast,
             asn: 8758,
             ip: IpAddr::V6(v6_addr),
             announcements: vec![],
@@ -204,8 +203,8 @@ async fn test_bgp_peer_statemachine_outbound_conn() {
         http_addr: None,
         listen_addrs: vec!["[::]:9179".to_owned()],
         peers: vec![PeerConfig {
-            afi: address_family_identifier_values::IPV6,
-            safi: subsequent_address_family_identifier_values::UNICAST,
+            afi: AddressFamilyIdentifier::Ipv6,
+            safi: SubsequentAddressFamilyIdentifier::Unicast,
             asn: 8758,
             ip: IpAddr::V6(v6_addr),
             port: Some(port),

@@ -1157,11 +1157,11 @@ mod tests {
         assert_eq!(result.1.nlris.len(), 2);
         assert_eq!(
             format!("{}", result.1.nlris[0]),
-            "NLRI: afi: 2, prefixlen: 32, prefix: [20, 1, db, 8]"
+            "NLRI: afi: Ipv6, prefixlen: 32, prefix: [20, 1, db, 8]"
         );
         assert_eq!(
             format!("{}", result.1.nlris[1]),
-            "NLRI: afi: 2, prefixlen: 16, prefix: [fe, 80]"
+            "NLRI: afi: Ipv6, prefixlen: 16, prefix: [fe, 80]"
         );
         assert_eq!(result.0.len(), 0);
 
@@ -1186,11 +1186,11 @@ mod tests {
         assert_eq!(result.1.nlris.len(), 2);
         assert_eq!(
             format!("{}", result.1.nlris[0]),
-            "NLRI: afi: 2, prefixlen: 32, prefix: [20, 1, db, 8]"
+            "NLRI: afi: Ipv6, prefixlen: 32, prefix: [20, 1, db, 8]"
         );
         assert_eq!(
             format!("{}", result.1.nlris[1]),
-            "NLRI: afi: 2, prefixlen: 16, prefix: [fe, 80]"
+            "NLRI: afi: Ipv6, prefixlen: 16, prefix: [fe, 80]"
         );
         assert_eq!(result.0.len(), 0);
 

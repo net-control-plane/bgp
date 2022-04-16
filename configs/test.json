@@ -2,6 +2,7 @@
 	"identifier": "193.36.105.196",
 	"asn": 210036,
 	"hold_time": 180,
+	"http_addr": "[::]:9179",
 	"listen_addrs": [
 		"[::]:1790"
 	],

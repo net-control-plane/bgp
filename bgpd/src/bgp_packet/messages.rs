@@ -566,7 +566,7 @@ mod tests {
         let (buf, result) = BGPMessage::from_wire(ctx, open_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
-        let want_str = "OpenMessage: [version: 4, asn: 42, hold_time: 180, identifier: 212.25.22.38, options: [OpenOption: Capabilities: Capabilities: [MultiprotocolCapbility: [ IPv4 UNICAST ]]OpenOption: Capabilities: Capabilities: [UnknownCapability type: 128]OpenOption: Capabilities: Capabilities: [RouteRefreshCapability]OpenOption: Capabilities: Capabilities: [UnknownCapability type: 70]OpenOption: Capabilities: Capabilities: [FourByteASN: asn: 42]]]";
+        let want_str = "OpenMessage: [version: 4, asn: 42, hold_time: 180, identifier: 212.25.22.38, options: [OpenOption: Capabilities: Capabilities: [MultiprotocolCapbility: [ Ipv4 Unicast ]]OpenOption: Capabilities: Capabilities: [UnknownCapability type: 128]OpenOption: Capabilities: Capabilities: [RouteRefreshCapability]OpenOption: Capabilities: Capabilities: [UnknownCapability type: 70]OpenOption: Capabilities: Capabilities: [FourByteASN: asn: 42]]]";
         assert_eq!(format!("{}", result), want_str);
 
         let wire: Vec<u8> = result.to_wire(ctx).unwrap();
@@ -585,7 +585,7 @@ mod tests {
         let (buf, result) = BGPMessage::from_wire(ctx, open_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
-        let want_str = "OpenMessage: [version: 4, asn: 8758, hold_time: 180, identifier: 212.25.27.45, options: [OpenOption: Capabilities: Capabilities: [MultiprotocolCapbility: [ IPv6 UNICAST ]]OpenOption: Capabilities: Capabilities: [RouteRefreshCapability]OpenOption: Capabilities: Capabilities: [UnknownCapability type: 128]OpenOption: Capabilities: Capabilities: [FourByteASN: asn: 8758]]]";
+        let want_str = "OpenMessage: [version: 4, asn: 8758, hold_time: 180, identifier: 212.25.27.45, options: [OpenOption: Capabilities: Capabilities: [MultiprotocolCapbility: [ Ipv6 Unicast ]]OpenOption: Capabilities: Capabilities: [RouteRefreshCapability]OpenOption: Capabilities: Capabilities: [UnknownCapability type: 128]OpenOption: Capabilities: Capabilities: [FourByteASN: asn: 8758]]]";
         assert_eq!(format!("{}", result), want_str);
 
         let wire: Vec<u8> = result.to_wire(ctx).unwrap();
@@ -609,7 +609,7 @@ mod tests {
         let (buf, result) = BGPMessage::from_wire(ctx, update_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
-        let want_str = "UpdateMessage [ withdrawn: NLRI: afi: 2, prefixlen: 24, prefix: [cb, 1, 4e]Origin: UnknownAS Path: { Segment [ Type: AS_SEGMENT 39540 57118 29691 1299 4739  ]] }NextHop: 185.95.219.36Communities: [  1299:35000,  29691:4000,  29691:4021,  39540:4000,  39540:4010,  57118:2000,  57118:2010,  ] LargeCommunities: [ 57118:20:0,  57118:20:10, ] ]";
+        let want_str = "UpdateMessage [ withdrawn: NLRI: afi: Ipv6, prefixlen: 24, prefix: [cb, 1, 4e]Origin: UnknownAS Path: { Segment [ Type: AS_SEGMENT 39540 57118 29691 1299 4739  ]] }NextHop: 185.95.219.36Communities: [  1299:35000,  29691:4000,  29691:4021,  39540:4000,  39540:4010,  57118:2000,  57118:2010,  ] LargeCommunities: [ 57118:20:0,  57118:20:10, ] ]";
         assert_eq!(format!("{}", result), want_str);
 
         let reencoded = result.to_wire(&ctx).unwrap();
