@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::constants::address_family_identifier_values;
 use crate::bgp_packet::constants::AddressFamilyIdentifier;
 use crate::bgp_packet::traits::BGPParserError;
 use crate::bgp_packet::traits::ParserContext;
@@ -93,7 +92,7 @@ impl TryFrom<NLRI> for Ipv6Addr {
 
     fn try_from(value: NLRI) -> Result<Self, Self::Error> {
         match value.afi {
-            address_family_identifier_values::IPV6 => {
+            AddressFamilyIdentifier::Ipv6 => {
                 let mut v: [u8; 16] = [0u8; 16];
                 if value.prefix.len() > v.len() {
                     return Err("prefix length greater than IPv6 address length".to_string());
@@ -114,7 +113,7 @@ impl TryFrom<NLRI> for Ipv4Addr {
 
     fn try_from(value: NLRI) -> Result<Self, Self::Error> {
         match value.afi {
-            address_family_identifier_values::IPV4 => {
+            AddressFamilyIdentifier::Ipv4 => {
                 let mut v: [u8; 4] = [0u8; 4];
                 if value.prefix.len() > v.len() {
                     return Err("prefix length greater than IPv4 address length".to_string());
@@ -134,7 +133,7 @@ impl TryInto<IpAddr> for NLRI {
     type Error = &'static str;
     fn try_into(self) -> Result<IpAddr, Self::Error> {
         match self.afi {
-            address_family_identifier_values::IPV4 => {
+            AddressFamilyIdentifier::Ipv4 => {
                 let mut v: [u8; 4] = [0u8; 4];
                 if self.prefix.len() > v.len() {
                     return Err("prefix length greater than IPv4 address length");
@@ -145,7 +144,7 @@ impl TryInto<IpAddr> for NLRI {
                 let ip4 = Ipv4Addr::new(v[0], v[1], v[2], v[3]);
                 Ok(IpAddr::V4(ip4))
             }
-            address_family_identifier_values::IPV6 => {
+            AddressFamilyIdentifier::Ipv6 => {
                 let mut v: [u8; 16] = [0u8; 16];
                 if self.prefix.len() > v.len() {
                     return Err("prefix length greater than IPv6 address length");
@@ -190,11 +189,11 @@ impl TryFrom<String> for NLRI {
         let afi: AddressFamilyIdentifier;
 
         if parts[0].contains(":") {
-            afi = address_family_identifier_values::IPV6;
+            afi = AddressFamilyIdentifier::Ipv6;
             let addr: Ipv6Addr = Ipv6Addr::from_str(parts[0]).map_err(|e| e.to_string())?;
             octets = addr.octets().to_vec();
         } else if parts[0].contains(".") {
-            afi = address_family_identifier_values::IPV4;
+            afi = AddressFamilyIdentifier::Ipv4;
             let addr: Ipv4Addr = Ipv4Addr::from_str(parts[0]).map_err(|e| e.to_string())?;
             octets = addr.octets().to_vec();
         } else {
@@ -240,7 +239,7 @@ impl fmt::Display for NLRI {
         write!(
             f,
             "NLRI: afi: {}, prefixlen: {}, prefix: {:x?}",
-            self.afi.0, self.prefixlen, self.prefix
+            self.afi, self.prefixlen, self.prefix
         )
     }
 }
@@ -250,7 +249,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use super::NLRI;
-    use crate::bgp_packet::constants::address_family_identifier_values::{IPV4, IPV6};
+    use crate::bgp_packet::constants::AddressFamilyIdentifier::{Ipv4, Ipv6};
     use crate::bgp_packet::traits::ParserContext;
     use crate::bgp_packet::traits::ReadablePacket;
     use crate::bgp_packet::traits::WritablePacket;
@@ -258,9 +257,9 @@ mod tests {
     #[test]
     fn test_basic_nlri_v6() {
         let nlri_bytes: &[u8] = &[0x20, 0x20, 0x01, 0xdb, 0x8];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let nlri_res: (&[u8], NLRI) = NLRI::from_wire(ctx, nlri_bytes).unwrap();
-        assert_eq!(nlri_res.1.afi, IPV6);
+        assert_eq!(nlri_res.1.afi, Ipv6);
         assert_eq!(nlri_res.1.prefixlen, 32);
         assert_eq!(nlri_res.1.prefix, vec![0x20, 0x01, 0xdb, 0x8]);
         assert_eq!(nlri_res.0.len(), 0);
@@ -273,9 +272,9 @@ mod tests {
     #[test]
     fn test_basic_nlri_v4() {
         let nlri_bytes: &[u8] = &[0x18, 192, 168, 1];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV4);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv4);
         let nlri_res: (&[u8], NLRI) = NLRI::from_wire(ctx, nlri_bytes).unwrap();
-        assert_eq!(nlri_res.1.afi, IPV4);
+        assert_eq!(nlri_res.1.afi, Ipv4);
         assert_eq!(nlri_res.1.prefixlen, 24);
         assert_eq!(nlri_res.1.prefix, vec![192, 168, 1]);
         assert_eq!(nlri_res.0.len(), 0);

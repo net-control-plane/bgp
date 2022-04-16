@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::constants::address_family_identifier_values;
 use crate::bgp_packet::constants::AddressFamilyIdentifier;
 use crate::server::peer::PeerCommands;
 use crate::server::rib_manager;
@@ -109,8 +108,11 @@ impl RouteService for RouteServer {
             epoch: 0,
             path_sets: vec![],
         };
-        match AddressFamilyIdentifier(request.get_ref().address_family as u16) {
-            address_family_identifier_values::IPV4 => {
+
+        let afi = AddressFamilyIdentifier::try_from(request.get_ref().address_family as u16)
+            .map_err(|e| tonic::Status::internal(e.to_string()))?;
+        match afi {
+            AddressFamilyIdentifier::Ipv4 => {
                 let (tx, rx) = tokio::sync::oneshot::channel::<RibSnapshot<Ipv4Addr>>();
                 if let Err(e) = self.ip4_manager.send(RouteManagerCommands::DumpRib(tx)) {
                     warn!("Failed to send DumpRib command to route manager: {}", e);
@@ -154,7 +156,7 @@ impl RouteService for RouteServer {
                     }
                 }
             }
-            address_family_identifier_values::IPV6 => {
+            AddressFamilyIdentifier::Ipv6 => {
                 let (tx, rx) = tokio::sync::oneshot::channel::<RibSnapshot<Ipv6Addr>>();
                 if let Err(e) = self.ip6_manager.send(RouteManagerCommands::DumpRib(tx)) {
                     warn!("Failed to send DumpRib command to route manager: {}", e);
@@ -197,9 +199,6 @@ impl RouteService for RouteServer {
                         ));
                     }
                 }
-            }
-            _ => {
-                return Err(tonic::Status::invalid_argument("Unknown address_family"));
             }
         }
     }

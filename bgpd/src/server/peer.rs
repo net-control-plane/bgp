@@ -17,9 +17,9 @@ use crate::bgp_packet::capabilities::{
     FourByteASNCapability, MultiprotocolCapability, OpenOption, OpenOptionCapabilities,
     OpenOptions,
 };
-use crate::bgp_packet::constants::address_family_identifier_values;
-use crate::bgp_packet::constants::subsequent_address_family_identifier_values;
-use crate::bgp_packet::constants::AS_TRANS;
+use crate::bgp_packet::constants::{
+    AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier, AS_TRANS,
+};
 use crate::bgp_packet::messages::BGPMessage;
 use crate::bgp_packet::messages::BGPMessageTypeValues;
 use crate::bgp_packet::messages::BGPMessageTypeValues::OPEN_MESSAGE;
@@ -76,9 +76,18 @@ type PeerInterface = mpsc::UnboundedSender<PeerCommands>;
 // not be expensive, and other tasks such as picking the best route
 // will be done in a different threading model.
 
+/// PeerStatus contians the current state of the PSM for monitoring
+/// and debugging.
+#[derive(Clone, Debug)]
+pub struct PeerStatus {
+    pub name: String,
+    pub config: PeerConfig,
+    pub state: BGPState,
+}
+
 /// BGPState represents which state of the BGP state machine the peer
 /// is currently in.
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum BGPState {
     /// Idle represents the configuration existing but not trying to
     /// establish connections to or accept connections from the peer.
@@ -126,6 +135,9 @@ pub enum PeerCommands {
     // Adds a community to all announcements.
     AddLargeCommunity((u32, u32), oneshot::Sender<String>),
     RemoveLargeCommunity((u32, u32), oneshot::Sender<String>),
+
+    // GetStatus is a crude hack to get a status string out of the PSM for debugging.
+    GetStatus(oneshot::Sender<PeerStatus>),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -204,31 +216,47 @@ async fn check_hold_timer(
 // parse_incoming_msgs reads messages from a TCP socket and dispatches the parsed
 // BGP messages to the PeerInterface.
 async fn parse_incoming_msgs(
+    cancel_token: CancellationToken,
     conn: &mut tcp::OwnedReadHalf,
     iface: PeerInterface,
     codec: &mut Arc<Mutex<Codec>>,
 ) -> Result<(), std::io::Error> {
     let mut buf = BytesMut::new();
     loop {
-        let len = conn.read_buf(&mut buf).await?;
-
-        if len == 0 {
-            while let Some(frame) = codec.lock().await.decode_eof(&mut buf)? {
-                iface
-                    .send(PeerCommands::MessageFromPeer(frame.payload))
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        tokio::select! {
+            _ = cancel_token.cancelled() => {
+                info!("check_hold_timer was cancelled");
+                return Ok(());
             }
-            iface
-                .send(PeerCommands::ConnectionClosed())
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-            info!("Exiting handler");
-            return Ok(());
-        }
+            len_res = conn.read_buf(&mut buf) => {
+                match len_res {
+                    Err(e) => {
+                        warn!("Failed to read from buf: {}", e);
+                        // XXX: Put the right error here.
+                        return Ok(())
+                    }
+                    Ok(len) => {
+                        if len == 0 {
+                            while let Some(frame) = codec.lock().await.decode_eof(&mut buf)? {
+                                iface
+                                    .send(PeerCommands::MessageFromPeer(frame.payload))
+                                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                                }
+                                iface
+                                    .send(PeerCommands::ConnectionClosed())
+                                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                                info!("Exiting handler");
+                                return Ok(());
+                        }
 
-        while let Some(frame) = codec.lock().await.decode(&mut buf)? {
-            iface
-                .send(PeerCommands::MessageFromPeer(frame.payload))
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                        while let Some(frame) = codec.lock().await.decode(&mut buf)? {
+                            iface
+                                .send(PeerCommands::MessageFromPeer(frame.payload))
+                                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -302,7 +330,8 @@ pub struct PeerStateMachine<A: Address> {
     prefixes_in: IpLookupTable<A, RouteInfo<A>>,
 
     // prefixes_out contains the routes we want to export to the peer.
-    prefixes_out: IpLookupTable<A, RouteUpdate>,
+    // TODO: Use this.
+    //prefixes_out: IpLookupTable<A, RouteUpdate>,
 
     // Interface to this state machine
     pub iface_rx: mpsc::UnboundedReceiver<PeerCommands>,
@@ -321,6 +350,7 @@ pub struct PeerStateMachine<A: Address> {
     connect_timer: Option<(JoinHandle<()>, CancellationToken)>,
     hold_timer: Option<(JoinHandle<()>, CancellationToken)>,
     keepalive_timer: Option<(JoinHandle<()>, CancellationToken)>,
+    read_cancel_token: Option<CancellationToken>,
 
     shutdown: broadcast::Receiver<()>,
 }
@@ -353,7 +383,6 @@ where
                 },
             })),
             prefixes_in: IpLookupTable::new(),
-            prefixes_out: IpLookupTable::new(),
             iface_rx,
             iface_tx,
             route_manager,
@@ -361,6 +390,7 @@ where
             connect_timer: None,
             hold_timer: None,
             keepalive_timer: None,
+            read_cancel_token: None,
             shutdown,
         };
     }
@@ -463,8 +493,12 @@ where
                 // Spawn a worker task to receive messages from the peer.
                 // If the connection gets closed, then a ConnectionClosed message is sent
                 // on chan so handle_chan_msg can clean up the state.
+                let read_cancel_token = CancellationToken::new();
+                self.read_cancel_token = Some(read_cancel_token.clone());
                 tokio::spawn(async move {
-                    match parse_incoming_msgs(&mut read_half, chan, &mut codec).await {
+                    match parse_incoming_msgs(read_cancel_token, &mut read_half, chan, &mut codec)
+                        .await
+                    {
                         Ok(_) => info!("reader task shutdown for peer: {}", peer_name),
                         Err(e) => warn!(
                             "reader task for peer {} exited with error: {}",
@@ -587,6 +621,22 @@ where
                     self.send_keepalive().await?;
                 }
             },
+            PeerCommands::GetStatus(sender) => {
+                let state = PeerStatus {
+                    name: self.config.name.clone(),
+                    config: self.config.clone(),
+                    state: self.state,
+                };
+                match sender.send(state) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        warn!(
+                            "PeerCommands::GetStatus: Failed to send state back to requester: {:?}",
+                            e
+                        )
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -625,7 +675,48 @@ where
             None => {}
         }
 
-        // Start connect timer.
+        // Cancel the reading task.
+        if let Some(cancel_token) = &self.read_cancel_token {
+            cancel_token.cancel();
+        }
+
+        // Close the TCP stream.
+        match self.tcp_stream.as_mut() {
+            Some(stream) => match stream.shutdown().await {
+                Ok(_) => info!("Closed TCP stream with peer: {}", self.config.name),
+                Err(e) => warn!(
+                    "Failed to close TCP stream with peer {}: {}",
+                    self.config.name,
+                    e.to_string()
+                ),
+            },
+            None => {}
+        }
+
+        // Iterate over every route that we've announced to the route manager
+        // and withdraw it.
+        let mut route_withdraw = RouteWithdraw {
+            peer: self.config.name.clone(),
+            prefixes: vec![],
+        };
+
+        for prefix in self.prefixes_in.iter_mut() {
+            route_withdraw.prefixes.push(prefix.2.nlri.clone());
+        }
+
+        self.route_manager
+            .send(RouteManagerCommands::Update(RouteUpdate::Withdraw(
+                route_withdraw,
+            )))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, e.to_string()))?;
+
+        // Clear prefixes_in.
+        self.prefixes_in = IpLookupTable::new();
+
+        // Set the state machine back to the expected.
+        self.state = BGPState::Active;
+
+        // Restart the connect timer to try and connect periodically.
         {
             let token = CancellationToken::new();
             let token_copy = token.clone();
@@ -642,23 +733,6 @@ where
 
             self.connect_timer = Some((connect_timer, token));
         }
-
-        // Close the TCP stream.
-        match self.tcp_stream.as_mut() {
-            Some(stream) => match stream.shutdown().await {
-                Ok(_) => info!("Closed TCP stream with peer: {}", self.config.name),
-                Err(e) => warn!(
-                    "Failed to close TCP stream with peer {}: {}",
-                    self.config.name,
-                    e.to_string()
-                ),
-            },
-            None => {}
-        }
-        // Set the state machine back to the expected.
-        self.state = BGPState::Active;
-
-        // Restart the connect timer to try and connect periodically.
 
         Ok(())
     }
@@ -887,11 +961,8 @@ where
                     match &option.oval {
                         OpenOptions::Capabilities(caps) => {
                             for cap in &caps.caps {
-                                match &cap.val {
-                                    BGPCapabilityValue::FourByteASN(c) => {
-                                        as4_cap = Some(c.clone());
-                                    }
-                                    _ => {}
+                                if let BGPCapabilityValue::FourByteASN(v) = &cap.val {
+                                    as4_cap = Some(v.clone());
                                 }
                             }
                         }
@@ -942,11 +1013,8 @@ where
                     match &option.oval {
                         OpenOptions::Capabilities(caps) => {
                             for cap in &caps.caps {
-                                match &cap.val {
-                                    BGPCapabilityValue::Multiprotocol(mp) => {
-                                        mp_cap = Some(mp.clone());
-                                    }
-                                    _ => {}
+                                if let BGPCapabilityValue::Multiprotocol(mp) = &cap.val {
+                                    mp_cap = Some(mp.clone());
                                 }
                             }
                         }
@@ -1072,8 +1140,7 @@ where
             _ => Err(format!(
                 "Got unsupported message type in handle_openconfirm_msg: {:?}",
                 msg
-            )
-            .to_string()),
+            )),
         }
     }
 
@@ -1086,26 +1153,6 @@ where
 
         self.send_notification(notification).await?;
         self.connection_closed().await?;
-
-        // Iterate over every route that we've announced to the route manager
-        // and withdraw it.
-        let mut route_withdraw = RouteWithdraw {
-            peer: self.config.name.clone(),
-            prefixes: vec![],
-        };
-
-        for prefix in self.prefixes_in.iter_mut() {
-            route_withdraw.prefixes.push(prefix.2.nlri.clone());
-        }
-
-        self.route_manager
-            .send(RouteManagerCommands::Update(RouteUpdate::Withdraw(
-                route_withdraw,
-            )))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, e.to_string()))?;
-
-        // Clear prefixes_in.
-        self.prefixes_in = IpLookupTable::new();
 
         Ok(())
     }
@@ -1127,7 +1174,7 @@ where
             .push(ASPathAttribute::from_asns(vec![self.server_config.asn]));
 
         match self.config.afi {
-            address_family_identifier_values::IPV4 => {
+            AddressFamilyIdentifier::Ipv4 => {
                 match announcement.nexthop {
                     IpAddr::V4(nh) => {
                         bgp_update_msg
@@ -1142,20 +1189,17 @@ where
                 let nlri = NLRI::try_from(announcement.prefix.clone())?;
                 bgp_update_msg.announced_nlri.push(nlri);
             }
-            address_family_identifier_values::IPV6 => {
-                let nexthop_octets: Vec<u8>;
-                match announcement.nexthop {
-                    IpAddr::V6(nh) => {
-                        nexthop_octets = nh.octets().to_vec();
-                    }
+            AddressFamilyIdentifier::Ipv6 => {
+                let nexthop_octets = match announcement.nexthop {
+                    IpAddr::V6(nh) => nh.octets().to_vec(),
                     _ => {
                         return Err("Found non IPv6 nexthop in announcement".to_string());
                     }
-                }
+                };
                 let nlri = NLRI::try_from(announcement.prefix.clone())?;
                 let mp_reach = MPReachNLRIPathAttribute {
-                    afi: address_family_identifier_values::IPV6,
-                    safi: subsequent_address_family_identifier_values::UNICAST,
+                    afi: AddressFamilyIdentifier::Ipv6,
+                    safi: SubsequentAddressFamilyIdentifier::Unicast,
                     nexthop: nexthop_octets,
                     nlris: vec![nlri],
                 };
@@ -1170,7 +1214,7 @@ where
             let mut large_communities_attr = LargeCommunitiesPathAttribute { values: vec![] };
             for large_community in large_communities {
                 let parts: Vec<u32> = large_community
-                    .split(":")
+                    .split(':')
                     .flat_map(|x| x.parse::<u32>())
                     .collect();
                 if parts.len() != 3 {
@@ -1202,17 +1246,14 @@ where
             .lock()
             .await
             .encode(bgp_message, &mut buf)
-            .map_err(|e| format!("failed to encode BGP message: {}", e).to_string())?;
+            .map_err(|e| format!("failed to encode BGP message: {}", e))?;
 
-        match self.tcp_stream.as_mut() {
-            Some(stream) => {
-                stream
-                    .write(&buf)
-                    .await
-                    .map_err(|e| format!("Failed to write msg to peer: {}", e).to_string())?;
-            }
-            None => {}
-        };
+        if let Some(stream) = self.tcp_stream.as_mut() {
+            stream
+                .write(&buf)
+                .await
+                .map_err(|e| format!("Failed to write msg to peer: {}", e))?;
+        }
         Ok(())
     }
 
@@ -1220,7 +1261,7 @@ where
     async fn handle_established_msg(&mut self, msg: BGPSubmessage) -> Result<(), String> {
         match msg {
             BGPSubmessage::UpdateMessage(u) => {
-                if !self.decide_accept_message(&u.path_attributes.clone()) {
+                if !self.decide_accept_message(&u.path_attributes) {
                     info!(
                         "Rejected message due to path attributes: {:?}",
                         u.path_attributes
@@ -1233,15 +1274,12 @@ where
                         PathAttribute::MPReachNLRIPathAttribute(nlri) => {
                             let nexthop_res = nlri.clone().nexthop_to_v6();
                             // TODO: How do we pick whether to use the global or LLNH?
-                            match nexthop_res {
-                                Some((global, _llnh_opt)) => {
-                                    self.process_announcements(
-                                        global.octets().to_vec(),
-                                        nlri.nlris.clone(),
-                                        u.path_attributes.clone(),
-                                    )?;
-                                }
-                                None => {}
+                            if let Some((global, _llnh_opt)) = nexthop_res {
+                                self.process_announcements(
+                                    global.octets().to_vec(),
+                                    nlri.nlris.clone(),
+                                    u.path_attributes.clone(),
+                                )?;
                             }
                         }
                         PathAttribute::MPUnreachNLRIPathAttribute(nlri) => {
@@ -1251,17 +1289,14 @@ where
                     }
                 }
 
-                if u.withdrawn_nlri.len() > 0 {
+                if !u.withdrawn_nlri.is_empty() {
                     self.process_withdrawals(u.withdrawn_nlri)?;
                 }
-                if u.announced_nlri.len() > 0 {
+                if !u.announced_nlri.is_empty() {
                     let mut nexthop_option: Option<NextHopPathAttribute> = None;
                     for attr in &u.path_attributes {
-                        match attr {
-                            PathAttribute::NextHopPathAttribute(nh_attr) => {
-                                nexthop_option = Some(nh_attr.clone());
-                            }
-                            _ => {}
+                        if let PathAttribute::NextHopPathAttribute(nh_attr) = attr {
+                            nexthop_option = Some(nh_attr.clone());
                         }
                     }
                     match nexthop_option {
@@ -1269,7 +1304,7 @@ where
                             self.process_announcements(
                                 nexthop.0.octets().to_vec(),
                                 u.announced_nlri,
-                                u.path_attributes.clone(),
+                                u.path_attributes,
                             )?;
                         }
                         None => {
@@ -1292,7 +1327,7 @@ where
                 Ok(())
             }
             BGPSubmessage::KeepaliveMessage(_) => Ok(()),
-            _ => Err(format!("Got unexpected message from peer: {:?}", msg).to_string()),
+            _ => Err(format!("Got unexpected message from peer: {:?}", msg)),
         }
     }
 }

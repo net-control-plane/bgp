@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use bgpd::server::config::ServerConfig;
-use bgpd::server::server::Server;
+use bgpd::server::bgp_server::Server;
 use clap::{App, Arg};
 use core::sync::atomic::AtomicBool;
 use libc::SIGUSR1;

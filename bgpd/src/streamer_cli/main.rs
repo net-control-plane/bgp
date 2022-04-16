@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use bgpd::bgp_packet::constants::address_family_identifier_values;
+use bgpd::bgp_packet::constants::AddressFamilyIdentifier;
 use bgpd::bgp_packet::nlri::NLRI;
 use bgpd::server::route_server::route_server::route_service_client::RouteServiceClient;
 use bgpd::server::route_server::route_server::DumpPathsRequest;
@@ -50,7 +50,7 @@ async fn main() -> Result<(), String> {
     // 1. First subscribe to the route feed and put these into an unbounded channel.
     let (stream_tx, mut stream_rx) = tokio::sync::mpsc::unbounded_channel::<PathSet>();
     let request = StreamPathsRequest {
-        address_family: 2 as i32,
+        address_family: 2_i32,
     };
 
     let mut client_copy = client.clone();
@@ -68,7 +68,7 @@ async fn main() -> Result<(), String> {
 
     // 2. Dump the whole RIB
     let dump_request = DumpPathsRequest {
-        address_family: 2 as i32,
+        address_family: 2_i32,
     };
     let dump_response = client.dump_paths(dump_request).await.unwrap().into_inner();
     let dump_epoch = dump_response.epoch;
@@ -99,7 +99,7 @@ async fn main() -> Result<(), String> {
         // Parse an NLRI from the pathset
         if let Some(prefix) = &pathset.prefix {
             let nlri = NLRI::from_bytes(
-                address_family_identifier_values::IPV6,
+                AddressFamilyIdentifier::Ipv6,
                 prefix.ip_prefix.clone(),
                 prefix.prefix_len as u8,
             )
@@ -112,7 +112,7 @@ async fn main() -> Result<(), String> {
     if let Some(pathset) = overrun_slot {
         if let Some(prefix) = &pathset.prefix {
             let nlri = NLRI::from_bytes(
-                address_family_identifier_values::IPV6,
+                AddressFamilyIdentifier::Ipv6,
                 prefix.ip_prefix.clone(),
                 prefix.prefix_len as u8,
             )
@@ -130,7 +130,7 @@ async fn main() -> Result<(), String> {
                 // Parse an NLRI from the pathset
                 if let Some(prefix) = &pathset.prefix {
                     let nlri = NLRI::from_bytes(
-                        address_family_identifier_values::IPV6,
+                        AddressFamilyIdentifier::Ipv6,
                         prefix.ip_prefix.clone(),
                         prefix.prefix_len as u8,
                     )

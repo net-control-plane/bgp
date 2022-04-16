@@ -434,24 +434,30 @@ pub struct MultiprotocolCapability {
 }
 
 impl MultiprotocolCapability {
-    fn new(afi: u16, safi: u8) -> MultiprotocolCapability {
-        MultiprotocolCapability {
-            afi: AddressFamilyIdentifier(afi),
-            safi: SubsequentAddressFamilyIdentifier(safi),
-        }
+    fn new(
+        afi: AddressFamilyIdentifier,
+        safi: SubsequentAddressFamilyIdentifier,
+    ) -> MultiprotocolCapability {
+        MultiprotocolCapability { afi, safi }
     }
 }
 
 impl ReadablePacket for MultiprotocolCapability {
     fn from_wire<'a>(
-        _: &ParserContext,
+        ctx: &ParserContext,
         buf: &'a [u8],
     ) -> IResult<&'a [u8], MultiprotocolCapability, BGPParserError<&'a [u8]>> {
-        let (buf, (afi, _, safi)) = nom::combinator::complete(nom::sequence::tuple((
-            nom::number::complete::be_u16,
+        let (buf, (afi_raw, _, safi_raw)) = nom::combinator::complete(nom::sequence::tuple((
+            |i| AddressFamilyIdentifier::from_wire(ctx, i),
             nom::bytes::complete::take(1u8),
-            nom::number::complete::be_u8,
+            |i| SubsequentAddressFamilyIdentifier::from_wire(ctx, i),
         )))(buf)?;
+
+        let afi = AddressFamilyIdentifier::try_from(afi_raw)
+            .map_err(|e| nom::Err::Error(BGPParserError::CustomText(e.to_string())))?;
+        let safi = SubsequentAddressFamilyIdentifier::try_from(safi_raw)
+            .map_err(|e| nom::Err::Error(BGPParserError::CustomText(e.to_string())))?;
+
         IResult::Ok((buf, MultiprotocolCapability::new(afi, safi)))
     }
 }
@@ -460,8 +466,8 @@ impl WritablePacket for MultiprotocolCapability {
     fn to_wire(&self, _: &ParserContext) -> Result<Vec<u8>, &'static str> {
         // [ AFI: uint16, 0: uint8, SAFI: uint8 ]
         let mut res = [0u8; 4];
-        byteorder::NetworkEndian::write_u16(&mut res[..2], self.afi.0);
-        res[3] = self.safi.0;
+        byteorder::NetworkEndian::write_u16(&mut res[..2], self.afi.into());
+        res[3] = self.safi.into();
         Ok(res.to_vec())
     }
     fn wire_len(&self, _: &ParserContext) -> Result<u16, &'static str> {
@@ -521,16 +527,19 @@ pub struct GracefulRestartPayload {
 
 impl ReadablePacket for GracefulRestartPayload {
     fn from_wire<'a>(
-        _: &ParserContext,
+        ctx: &ParserContext,
         buf: &'a [u8],
     ) -> IResult<&'a [u8], GracefulRestartPayload, BGPParserError<&'a [u8]>> {
-        let (buf, (afi, safi, flags)) =
-            nom::combinator::complete(nom::sequence::tuple((be_u16, be_u8, be_u8)))(buf)?;
+        let (buf, (afi, safi, flags)) = nom::combinator::complete(nom::sequence::tuple((
+            |i| AddressFamilyIdentifier::from_wire(ctx, i),
+            |i| SubsequentAddressFamilyIdentifier::from_wire(ctx, i),
+            be_u8,
+        )))(buf)?;
         IResult::Ok((
             buf,
             GracefulRestartPayload {
-                afi: AddressFamilyIdentifier(afi),
-                safi: SubsequentAddressFamilyIdentifier(safi),
+                afi,
+                safi,
                 af_flags: (0x80 & flags) != 0,
             },
         ))
@@ -615,14 +624,14 @@ mod tests {
     use super::BGPCapabilityValue;
     use super::FourByteASNCapability;
     use super::OpenOption;
-    use crate::bgp_packet::constants::address_family_identifier_values::IPV6;
+    use crate::bgp_packet::constants::AddressFamilyIdentifier::Ipv6;
     use crate::bgp_packet::traits::ParserContext;
     use crate::bgp_packet::traits::ReadablePacket;
 
     #[test]
     fn test_four_byte_asn_capability() {
         let bytes: &[u8] = &[0x41, 0x04, 0x00, 0x00, 0x00, 0x2a];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let (buf, result) = BGPCapability::from_wire(ctx, bytes).unwrap();
         assert_eq!(
             result,
@@ -640,7 +649,7 @@ mod tests {
             0x02, 0x06, 0x01, 0x04, 0x00, 0x01, 0x00, 0x01, 0x02, 0x02, 0x80, 0x00, 0x02, 0x02,
             0x02, 0x00, 0x02, 0x02, 0x46, 0x00, 0x02, 0x06, 0x41, 0x04, 0x00, 0x00, 0x00, 0x2a,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let (_buf, result) =
             nom::multi::many0(|buf: &'a [u8]| OpenOption::from_wire(ctx, buf))(option_bytes)
                 .unwrap();

@@ -71,7 +71,7 @@ impl PartialEq for Path {
         }
 
         // Use peer name as discriminator of last resort
-        return self.peer_name < other.peer_name;
+        self.peer_name < other.peer_name
     }
 }
 
@@ -179,8 +179,8 @@ where
             snapshot.routes.push(pathset.2.lock().unwrap().clone());
         }
         // TODO: handle an error here.
-        if let Err(_) = sender.send(snapshot) {
-            warn!("Failed to send snapshot of RIB.");
+        if let Err(e) = sender.send(snapshot) {
+            warn!("Failed to send snapshot of RIB: {:?}", e);
         }
         info!("Done RIB dump");
     }
@@ -194,13 +194,15 @@ where
     ) {
         // Send all the routes currently in the RIB.
         for pathset in self.rib.iter() {
-            dump_sender.send((self.epoch, pathset.2.lock().unwrap().clone()));
+            if let Err(e) = dump_sender.send((self.epoch, pathset.2.lock().unwrap().clone())) {
+                warn!("Failed to send dump to client: {}", e);
+            }
         }
         drop(dump_sender);
         // Create a new subscriber and return that to the caller to be notified of updates.
         let subscriber = self.pathset_streaming_handle.subscribe();
-        if let Err(_) = stream_sender.send(subscriber) {
-            warn!("Failed to send subscriber in stream_rib");
+        if let Err(e) = stream_sender.send(subscriber) {
+            warn!("Failed to send subscriber in stream_rib: {:?}", e);
         }
     }
 
@@ -319,10 +321,9 @@ where
     }
 
     pub fn lookup_path_exact(&self, addr: A, prefixlen: u32) -> Option<PathSet<A>> {
-        match self.rib.exact_match(addr, prefixlen) {
-            Some(path) => Some(path.lock().unwrap().clone()),
-            None => None,
-        }
+        self.rib
+            .exact_match(addr, prefixlen)
+            .map(|path| path.lock().unwrap().clone())
     }
 }
 
@@ -353,7 +354,7 @@ mod tests {
         let announce = RouteAnnounce {
             peer: "Some peer".to_string(),
             prefixes: vec![NLRI {
-                afi: AddressFamilyIdentifier(2),
+                afi: AddressFamilyIdentifier::Ipv6,
                 prefixlen: 32,
                 prefix: vec![0x20, 0x01, 0xd, 0xb8],
             }],

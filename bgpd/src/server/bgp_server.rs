@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::constants::address_family_identifier_values;
+use crate::bgp_packet::constants::AddressFamilyIdentifier;
 use crate::server::config::PeerConfig;
 use crate::server::config::ServerConfig;
 use crate::server::peer::PeerCommands;
@@ -34,6 +34,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot;
 use tracing::{info, warn};
 use warp::Filter;
+use warp::Reply;
 
 // socket_listener starts listening on the given address, and passes clients that have
 // made an inbound connection to the provided stream. It also implements logic for
@@ -47,15 +48,15 @@ async fn socket_listener(
 ) {
     info!("Starting to listen on addr: {}", listen_addr);
     let listener_result = TcpListener::bind(&listen_addr).await;
-    if !listener_result.is_ok() {
-        let err_str = listener_result.err().unwrap().to_string();
-        warn!("Listener for {} failed: {:?}", listen_addr, err_str);
-        match notifier.send(Err(err_str)) {
+    if let Err(e) = listener_result {
+        warn!("Listener for {} failed: {}", listen_addr, e.to_string());
+        match notifier.send(Err(e.to_string())) {
             Ok(_) => {}
             Err(e) => warn!("Failed to send notification of channel error: {:?}", e),
         }
         return;
     }
+
     let listener = listener_result.unwrap();
     match notifier.send(Ok(())) {
         Ok(_) => {}
@@ -160,29 +161,96 @@ async fn start_http_server(
         }
     }
 
-    async fn modify_community_fn(
-        add: bool,
+    // reset_peer_connection causes the PSM to close the connection, flush state, and reconnect to the peer.
+    async fn reset_peer_connection(
+        peer_name: String,
         peers: HashMap<String, UnboundedSender<PeerCommands>>,
-        name: String,
-        ld1: u32,
-        ld2: u32,
     ) -> Result<impl warp::Reply, warp::Rejection> {
-        if let Some(chan) = peers.get(&name) {
-            if let Err(e) = func(chan.clone(), ld1, ld2).await {
-                warn!("Failed to add large community: {:?}", e);
-                return Err(warp::reject());
+        if let Some(peer_sender) = peers.get(&peer_name) {
+            if let Err(e) = peer_sender.send(PeerCommands::ConnectionClosed()) {
+                Ok(warp::reply::with_status(
+                    format!("Something went wrong: {}", e),
+                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                )
+                .into_response())
+            } else {
+                Ok(warp::reply::html(
+                    "Sent restart request to PeerStateMachine. Something might happen.",
+                )
+                .into_response())
             }
         } else {
-            return Err(warp::reject());
+            Ok(
+                warp::reply::with_status("No such peer found!", warp::http::StatusCode::NOT_FOUND)
+                    .into_response(),
+            )
         }
-        Ok(warp::reply::with_status("Ok", warp::http::StatusCode::OK))
     }
 
-    let add_community_filter = warp::post()
-        .map(move || true)
-        .and(warp::path::param())
-        .and(warp::path!(u32 / u32))
-        .and_then(modify_community_fn);
+    /// peerz is a debugging endpoint for PeerStateMachines on this server.
+    async fn get_peerz(
+        peers: HashMap<String, UnboundedSender<PeerCommands>>,
+    ) -> Result<impl warp::Reply, warp::Rejection> {
+        let mut result: String = "<!DOCTYPE html><body>".to_string();
+        for (peer_name, sender) in peers {
+            result += &format!("<h2>{}</h2><br/>", peer_name);
+            let (tx, rx) = oneshot::channel();
+            match sender.send(PeerCommands::GetStatus(tx)) {
+                Ok(()) => {}
+                Err(e) => {
+                    warn!("Failed to send request to PSM channel: {}", e);
+                    return Ok(warp::reply::with_status(
+                        "Something went wrong!",
+                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                    .into_response());
+                }
+            }
+            match rx.await {
+                Ok(resp) => {
+                    result += &format!("Peer state: <b>{:?}</b><br/>", resp.state);
+                    result += &format!("<code>{:?}</code>", resp.config);
+                }
+                Err(e) => {
+                    warn!("error on rx from peer channel: {}", e);
+                    return Ok(warp::reply::with_status(
+                        "Something went wrong!",
+                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                    .into_response());
+                }
+            }
+        }
+        result += "</body></html>";
+        Ok(warp::http::Response::builder().body(result).into_response())
+    }
+
+    /*
+        async fn modify_community_fn(
+            add: bool,
+            peers: HashMap<String, UnboundedSender<PeerCommands>>,
+            name: String,
+            ld1: u32,
+            ld2: u32,
+        ) -> Result<impl warp::Reply, warp::Rejection> {
+            if let Some(chan) = peers.get(&name) {
+                if let Err(e) = func(chan.clone(), ld1, ld2).await {
+                    warn!("Failed to add large community: {:?}", e);
+                    return Err(warp::reject());
+                }
+            } else {
+                return Err(warp::reject());
+            }
+            Ok(warp::reply::with_status("Ok", warp::http::StatusCode::OK))
+        }
+
+        let add_community_filter = warp::post()
+            .map(move || true)
+            .and(warp::path::param())
+            .and(warp::path!(u32 / u32))
+            .and_then(modify_community_fn);
+
+    */
 
     // Start the web server that has access to the rib managers so that it can expose the state.
     let v4_mgr_filter = warp::any().map(move || manager4.clone());
@@ -203,7 +271,25 @@ async fn start_http_server(
         .and(v6_mgr_filter)
         .and_then(manager_get_routes_handler);
 
-    let routes = warp_v4_routes.or(warp_v6_routes).or(add_community_filter);
+    let peers_map_filter = warp::any().map(move || peers.clone());
+    let peerz_route = warp::get()
+        .and(warp::path("peerz"))
+        .and(warp::path::end())
+        .and(peers_map_filter.clone())
+        .and_then(get_peerz);
+
+    let peers_restart_route = warp::post()
+        .and(warp::path("peerz"))
+        .and(warp::path::param())
+        .and(warp::path("restart"))
+        .and(warp::path::end())
+        .and(peers_map_filter)
+        .and_then(reset_peer_connection);
+
+    let routes = warp_v4_routes
+        .or(warp_v6_routes)
+        .or(peerz_route)
+        .or(peers_restart_route);
     let (_, server) = warp::serve(routes)
         .try_bind_with_graceful_shutdown(listen_addr, async move {
             shutdown.recv().await.ok();
@@ -309,7 +395,7 @@ impl Server {
         for peer_config in &self.config.peers {
             let (psm_tx, psm_rx) = unbounded_channel::<PeerCommands>();
             match peer_config.afi {
-                address_family_identifier_values::IPV6 => {
+                AddressFamilyIdentifier::Ipv6 => {
                     let mut psm = PeerStateMachine::<Ipv6Addr>::new(
                         self.config.clone(),
                         peer_config.clone(),
@@ -323,7 +409,7 @@ impl Server {
                         warn!("Should not reach here");
                     }));
                 }
-                address_family_identifier_values::IPV4 => {
+                AddressFamilyIdentifier::Ipv6 => {
                     let mut psm = PeerStateMachine::<Ipv4Addr>::new(
                         self.config.clone(),
                         peer_config.clone(),

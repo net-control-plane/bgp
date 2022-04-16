@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod bgp_server;
 pub mod config;
 pub mod data_structures;
 pub mod peer;
 pub mod rib_manager;
 pub mod route_server;
-pub mod server;

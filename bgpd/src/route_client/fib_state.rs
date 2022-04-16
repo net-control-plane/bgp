@@ -80,7 +80,7 @@ where
     /// route_add requests updating the nexthop to a particular path if it is not already
     /// the best path.
     #[tracing::instrument]
-    pub fn route_add(&mut self, nlri: NLRI, nexthop: A) -> Result<(), String> {
+    pub fn route_add(&mut self, nlri: &NLRI, nexthop: A) -> Result<(), String> {
         // Lookup the path in the Fib, there are three possible outcomes:
         // 1. The route is not yet known, we add it to the FibState and inject it into the kernel,
         // 2. The route is known and has a prior nexthop that needs to be updated
@@ -99,7 +99,7 @@ where
                 } else {
                     // Remove old route
                     trace!("Remove old route: {:?}", entry);
-                    match self.nl_iface.mutate_route(
+                    if let Err(e) = self.nl_iface.mutate_route(
                         false,
                         self.af,
                         nlri.prefix.clone(),
@@ -107,15 +107,12 @@ where
                         entry.nexthop.octets(),
                         Some(self.table),
                     ) {
-                        Err(e) => {
-                            warn!(
+                        warn!(
                                 "Netlink returned error when trying to remove route: {} via {}, error: {}",
                                 nlri, entry.nexthop, e
                             );
-                            return Err("Netlink remove error".to_string());
-                        }
-                        _ => {}
-                    };
+                        return Err("Netlink remove error".to_string());
+                    }
 
                     // Add new route
                     trace!(
@@ -123,7 +120,7 @@ where
                         nlri.prefix,
                         nexthop
                     );
-                    match self.nl_iface.mutate_route(
+                    if let Err(e) = self.nl_iface.mutate_route(
                         true,
                         self.af,
                         nlri.prefix.clone(),
@@ -131,15 +128,12 @@ where
                         nexthop.octets(),
                         Some(self.table),
                     ) {
-                        Err(e) => {
-                            warn!(
-                                "Netlink returned error when trying to add route: {} via {}, error: {}",
-                                nlri, nexthop, e
-                            );
-                            return Err("Netlink add error".to_string());
-                        }
-                        _ => {}
-                    };
+                        warn!(
+                            "Netlink returned error when trying to add route: {} via {}, error: {}",
+                            nlri, nexthop, e
+                        );
+                        return Err("Netlink add error".to_string());
+                    }
 
                     entry.nexthop = nexthop;
                 }
@@ -150,7 +144,7 @@ where
                     nexthop: nexthop.clone(),
                 };
 
-                match self.nl_iface.mutate_route(
+                if let Err(e) = self.nl_iface.mutate_route(
                     true,
                     self.af,
                     nlri.prefix.clone(),
@@ -158,14 +152,11 @@ where
                     nexthop.octets(),
                     Some(self.table),
                 ) {
-                    Err(e) => {
-                        warn!(
-                            "Netlink returned error when trying to add route: {} via {}, error: {}",
-                            nlri, nexthop, e
-                        );
-                        return Err("Netlink add error".to_string());
-                    }
-                    _ => {}
+                    warn!(
+                        "Netlink returned error when trying to add route: {} via {}, error: {}",
+                        nlri, nexthop, e
+                    );
+                    return Err("Netlink add error".to_string());
                 }
 
                 let addr: A = nlri.clone().try_into()?;
@@ -183,22 +174,18 @@ where
         if let Some(entry_wrapped) = self.fib.exact_match(prefix_addr, nlri.prefixlen.into()) {
             {
                 let entry = entry_wrapped.lock().unwrap();
-                let update_res = self.nl_iface.mutate_route(
+                if let Err(e) = self.nl_iface.mutate_route(
                     false,
                     self.af,
                     nlri.prefix.clone(),
                     nlri.prefixlen.into(),
                     entry.nexthop.octets(),
                     Some(self.table),
-                );
-                match update_res {
-                    Err(e) => {
-                        warn!(
-                            "Failed to apply route mutation to remove NLRI: {}, error: {}",
-                            nlri, e
-                        );
-                    }
-                    _ => {}
+                ) {
+                    warn!(
+                        "Failed to apply route mutation to remove NLRI: {}, error: {}",
+                        nlri, e
+                    );
                 }
             }
             self.fib.remove(prefix_addr, nlri.prefixlen.into());

@@ -36,7 +36,7 @@ pub struct ServerConfig {
     pub peers: Vec<PeerConfig>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PeerConfig {
     /// A unique name for this peer.
     pub name: String,
@@ -57,7 +57,7 @@ pub struct PeerConfig {
     pub announcements: Vec<PrefixAnnouncement>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrefixAnnouncement {
     pub prefix: String,
     /// Nexthop to be announced for this prefix.

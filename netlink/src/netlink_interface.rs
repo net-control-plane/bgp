@@ -21,9 +21,11 @@ use crate::traits::NetlinkAttribute;
 use crate::traits::Serializable;
 use bytes::BytesMut;
 use libc::c_void;
+use log::info;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Formatter;
+use std::net::Ipv6Addr;
 
 pub struct NetlinkInterface {
     nl_fd: libc::c_int,
@@ -51,6 +53,9 @@ impl fmt::Display for NetlinkError {
 impl std::error::Error for NetlinkError {}
 
 impl NetlinkInterface {
+    /// # Safety
+    /// This function is unsafe as it manually creates a netlink socket with the socket
+    /// system call.
     pub unsafe fn new() -> Result<NetlinkInterface, Box<dyn std::error::Error>> {
         let nl_fd = libc::socket(libc::AF_NETLINK, libc::SOCK_RAW, libc::NETLINK_ROUTE);
         if nl_fd < 0 {
@@ -90,6 +95,15 @@ impl NetlinkInterface {
         gateway: Vec<u8>,
         table: Option<u32>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        info!(
+            "Mutate route: {:x?}/{prefix_len} via {:x?}",
+            dst_prefix, gateway
+        );
+        // XXX: Fix this we should reuse the buffer instead of allocating a new one
+        // each time. But there's some bug with how the size is being manipulated
+        // below that causes the buffer to get exhausted.
+        self.buf = BytesMut::with_capacity(4096);
+
         let msg_type = match add {
             true => libc::RTM_NEWROUTE,
             false => libc::RTM_DELROUTE,
@@ -103,16 +117,18 @@ impl NetlinkInterface {
             nlmsg_len: 0, // Filled in later.
         };
 
-        let mut rt_msg = RouteMessage::new();
-        rt_msg.af = address_family;
-        rt_msg.dst_len = prefix_len;
+        let rt_msg = RouteMessage {
+            af: address_family,
+            dst_len: prefix_len,
+            ..Default::default()
+        };
 
         let dst_attr = RouteAttribute::Dst(dst_prefix);
         let gateway_addr = RouteAttribute::Gateway(gateway);
 
         nl_hdr.nlmsg_len = std::mem::size_of::<NetlinkHeader>() as u32
             + std::mem::size_of::<RouteMessage>() as u32
-            + 4 // Attribute heade
+            + 4 // Attribute header
             + dst_attr.payload_len() as u32
             + 4 // Attribute header
             + gateway_addr.payload_len() as u32;
@@ -168,27 +184,27 @@ impl NetlinkInterface {
                 (bytes_read as usize),
                 self.buf.capacity()
             );
-            self.buf.set_len(bytes_read as usize);
-        }
 
-        let (_header, response) = parse_netlink_message(&mut self.buf)?;
-        match response {
-            NetlinkPayload::Error(e) => {
-                if e.error == 0 {
-                    // Successful ACK of the route add.
-                    return Ok(());
-                } else {
-                    return Err(Box::new(NetlinkError::new(format!(
-                        "Got netlink error: {:?}",
-                        e
-                    ))));
+            // let read_view = self.buf.clone();
+            self.buf.set_len(bytes_read as usize);
+
+            let (_header, response) = parse_netlink_message(&mut self.buf)?;
+            match response {
+                NetlinkPayload::Error(e) => {
+                    if e.error == 0 {
+                        // Successful ACK of the route add.
+                        Ok(())
+                    } else {
+                        Err(Box::new(NetlinkError::new(format!(
+                            "Got netlink error: {:?}",
+                            e
+                        ))))
+                    }
                 }
-            }
-            _ => {
-                return Err(Box::new(NetlinkError::new(format!(
+                _ => Err(Box::new(NetlinkError::new(format!(
                     "Got unexpected netlink message: {:?}",
                     response
-                ))));
+                )))),
             }
         }
     }

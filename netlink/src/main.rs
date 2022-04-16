@@ -61,9 +61,11 @@ fn main() {
     };
 
     println!("message type: {}", nl_hdr.nlmsg_type);
-    let mut rt_msg = RouteMessage::new();
-    rt_msg.af = libc::AF_INET6 as u8;
-    rt_msg.dst_len = 32;
+    let rt_msg = RouteMessage {
+        af: libc::AF_INET6 as u8,
+        dst_len: 32,
+        ..Default::default()
+    };
 
     let dst_attr = RouteAttribute::Dst(vec![0x20, 0x01, 0xdb, 0x8]);
     let gateway_addr = RouteAttribute::Gateway(vec![
@@ -73,9 +75,9 @@ fn main() {
 
     let len = std::mem::size_of::<NetlinkHeader>()
         + std::mem::size_of::<RouteMessage>()
-        + 4 as usize
+        + 4_usize
         + dst_attr.payload_len() as usize
-        + 4 as usize
+        + 4_usize
         + gateway_addr.payload_len() as usize;
     nl_hdr.nlmsg_len = len as u32;
     println!("Length of netlink message: {}", len);

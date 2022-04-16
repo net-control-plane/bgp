@@ -858,8 +858,8 @@ impl ReadablePacket for MPReachNLRIPathAttribute {
         ctx: &ParserContext,
         buf: &'a [u8],
     ) -> IResult<&'a [u8], Self, BGPParserError<&'a [u8]>> {
-        let (buf, afi) = be_u16(buf)?;
-        let (buf, safi) = be_u8(buf)?;
+        let (buf, afi) = AddressFamilyIdentifier::from_wire(ctx, buf)?;
+        let (buf, safi) = SubsequentAddressFamilyIdentifier::from_wire(ctx, buf)?;
         let (buf, nexthop): (_, Vec<u8>) =
             nom::multi::length_value(be_u8, nom::multi::many0(be_u8))(buf)?;
         // Reserved field set to 0.
@@ -869,8 +869,8 @@ impl ReadablePacket for MPReachNLRIPathAttribute {
         Ok((
             buf,
             MPReachNLRIPathAttribute {
-                afi: AddressFamilyIdentifier(afi),
-                safi: SubsequentAddressFamilyIdentifier(safi),
+                afi,
+                safi,
                 nexthop,
                 nlris,
             },
@@ -881,8 +881,8 @@ impl ReadablePacket for MPReachNLRIPathAttribute {
 impl WritablePacket for MPReachNLRIPathAttribute {
     fn to_wire(&self, ctx: &ParserContext) -> Result<Vec<u8>, &'static str> {
         let mut buf = vec![0u8; 4];
-        byteorder::NetworkEndian::write_u16(&mut buf[0..2], self.afi.0);
-        buf[2] = self.safi.0;
+        byteorder::NetworkEndian::write_u16(&mut buf[0..2], self.afi.into());
+        buf[2] = self.safi.into();
         buf[3] = self.nexthop.len() as u8;
         buf.extend(&self.nexthop);
         // Reserved field set to 0.
@@ -909,7 +909,7 @@ impl fmt::Display for MPReachNLRIPathAttribute {
         write!(
             f,
             "MPReachNLRI: afi: {} safi: {}, nexthop: {:?} nlris: [",
-            self.afi.0, self.safi.0, self.nexthop
+            self.afi, self.safi, self.nexthop
         )?;
         for nlri in &self.nlris {
             std::fmt::Display::fmt(nlri, f)?;
@@ -931,24 +931,17 @@ impl ReadablePacket for MPUnreachNLRIPathAttribute {
         ctx: &ParserContext,
         buf: &'a [u8],
     ) -> IResult<&'a [u8], Self, BGPParserError<&'a [u8]>> {
-        let (buf, afi) = be_u16(buf)?;
-        let (buf, safi) = be_u8(buf)?;
+        let (buf, afi) = AddressFamilyIdentifier::from_wire(ctx, buf)?;
+        let (buf, safi) = SubsequentAddressFamilyIdentifier::from_wire(ctx, buf)?;
         let (buf, nlris): (_, Vec<NLRI>) = nom::multi::many0(|i| NLRI::from_wire(ctx, i))(buf)?;
-        Ok((
-            buf,
-            MPUnreachNLRIPathAttribute {
-                afi: AddressFamilyIdentifier(afi),
-                safi: SubsequentAddressFamilyIdentifier(safi),
-                nlris,
-            },
-        ))
+        Ok((buf, MPUnreachNLRIPathAttribute { afi, safi, nlris }))
     }
 }
 
 impl WritablePacket for MPUnreachNLRIPathAttribute {
     fn to_wire(&self, ctx: &ParserContext) -> Result<Vec<u8>, &'static str> {
         let mut buf = vec![0u8; 3];
-        NetworkEndian::write_u16(&mut buf[0..2], self.afi.0);
+        NetworkEndian::write_u16(&mut buf[0..2], self.afi.into());
         buf[2] = self.safi.into();
         for nlri in &self.nlris {
             buf.extend(nlri.to_wire(ctx)?);
@@ -970,7 +963,7 @@ impl fmt::Display for MPUnreachNLRIPathAttribute {
         write!(
             f,
             "MPUnreachNLRI: afi: {} safi: {}, nlris: [",
-            self.afi.0, self.safi.0
+            self.afi, self.safi
         )?;
         for nlri in &self.nlris {
             std::fmt::Display::fmt(nlri, f)?;
@@ -983,8 +976,8 @@ impl fmt::Display for MPUnreachNLRIPathAttribute {
 mod tests {
     use std::net::Ipv4Addr;
 
-    use crate::bgp_packet::constants::address_family_identifier_values::IPV6;
-    use crate::bgp_packet::constants::subsequent_address_family_identifier_values::UNICAST;
+    use crate::bgp_packet::constants::AddressFamilyIdentifier::Ipv6;
+    use crate::bgp_packet::constants::SubsequentAddressFamilyIdentifier::Unicast;
     use crate::bgp_packet::traits::ParserContext;
     use crate::bgp_packet::traits::ReadablePacket;
     use crate::bgp_packet::traits::WritablePacket;
@@ -1005,7 +998,7 @@ mod tests {
             0x02, 0x04, 0x00, 0x00, 0x9a, 0x74, 0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x20, 0x1a,
             0x00, 0x00, 0x78, 0xfc,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result = &ASPathAttribute::from_wire(ctx, as_path_bytes).unwrap();
 
         let expected_aspath: Vec<u32> = vec![39540, 57118, 8218, 30972];
@@ -1024,7 +1017,7 @@ mod tests {
             0x02, 0x04, 0x00, 0x00, 0x9a, 0x74, 0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x20, 0x1a,
             0x00, 0x00, 0x78, 0xfc, 0x01, 0x02, 0x00, 0x00, 0x9a, 0x74, 0x00, 0x00, 0xdf, 0x1e,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result = &ASPathAttribute::from_wire(ctx, as_path_bytes).unwrap();
 
         let expected_aspath: Vec<u32> = vec![39540, 57118, 8218, 30972];
@@ -1043,7 +1036,7 @@ mod tests {
     #[test]
     fn test_next_hop_path_attribute() {
         let nh_bytes: &[u8] = &[192, 168, 1, 1];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result = NextHopPathAttribute::from_wire(ctx, nh_bytes).unwrap();
 
         assert_eq!(result.1 .0, "192.168.1.1".parse::<Ipv4Addr>().unwrap());
@@ -1055,7 +1048,7 @@ mod tests {
     #[test]
     fn test_multi_exit_discriminator_path_attribute() {
         let med_bytes: &[u8] = &[0xca, 0x00, 0x00, 0xbe];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result = MultiExitDiscPathAttribute::from_wire(ctx, med_bytes).unwrap();
 
         assert_eq!(result.1 .0, 3388997822);
@@ -1067,7 +1060,7 @@ mod tests {
     #[test]
     fn test_local_pref_path_attribute() {
         let local_pref_bytes: &[u8] = &[0xca, 0x00, 0x00, 0xbe];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result = LocalPrefPathAttribute::from_wire(ctx, local_pref_bytes).unwrap();
 
         assert_eq!(result.1 .0, 3388997822);
@@ -1085,7 +1078,7 @@ mod tests {
             0xff, 0xf1, 0x73, 0xfb, 0x0f, 0xa0, 0x73, 0xfb, 0x0f, 0xc8, 0x9a, 0x74, 0x0f, 0xa0,
             0x9a, 0x74, 0x0f, 0xb4, 0xdf, 0x1e, 0x07, 0xd0, 0xdf, 0x1e, 0x07, 0xe4,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result = CommunitiesPathAttribute::from_wire(ctx, communities_bytes).unwrap();
         let expected_communities: Vec<(u16, u16)> = vec![
             (0, 0x32bd),
@@ -1122,7 +1115,7 @@ mod tests {
             0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0xdf, 0x1e, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x14,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result = LargeCommunitiesPathAttribute::from_wire(ctx, large_community_bytes).unwrap();
         assert_eq!(result.1.values.len(), 2);
         assert_eq!(result.1.values[0].global_admin, 57118);
@@ -1149,11 +1142,11 @@ mod tests {
             0x20, 0x20, 0x01, 0xdb, 0x08, // NLRI 1
             0x10, 0xfe, 0x80, // NLRI 2
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result: (&[u8], MPReachNLRIPathAttribute) =
             MPReachNLRIPathAttribute::from_wire(ctx, mp_reach_bytes).unwrap();
-        assert_eq!(result.1.afi, IPV6);
-        assert_eq!(result.1.safi, UNICAST);
+        assert_eq!(result.1.afi, Ipv6);
+        assert_eq!(result.1.safi, Unicast);
         assert_eq!(
             result.1.nexthop,
             vec![
@@ -1185,11 +1178,11 @@ mod tests {
             0x20, 0x20, 0x01, 0xdb, 0x08, // NLRI 1
             0x10, 0xfe, 0x80, // NLRI 2
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let result: (&[u8], MPUnreachNLRIPathAttribute) =
             MPUnreachNLRIPathAttribute::from_wire(ctx, mp_unreach_bytes).unwrap();
-        assert_eq!(result.1.afi, IPV6);
-        assert_eq!(result.1.safi, UNICAST);
+        assert_eq!(result.1.afi, Ipv6);
+        assert_eq!(result.1.safi, Unicast);
         assert_eq!(result.1.nlris.len(), 2);
         assert_eq!(
             format!("{}", result.1.nlris[0]),
@@ -1219,7 +1212,7 @@ mod tests {
             0x9a, 0x74, 0x0f, 0xbe,
         ];
 
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let (buf, res): (_, Vec<PathAttribute>) =
             nom::multi::many0(|buf: &'a [u8]| PathAttribute::from_wire(ctx, buf))(path_attr_bytes)
                 .unwrap();

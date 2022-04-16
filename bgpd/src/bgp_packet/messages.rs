@@ -181,8 +181,8 @@ pub struct RouteRefreshMessage {
 impl WritablePacket for RouteRefreshMessage {
     fn to_wire(&self, _: &ParserContext) -> Result<Vec<u8>, &'static str> {
         let mut res = [0u8; 4];
-        byteorder::NetworkEndian::write_u16(&mut res[..2], self.afi.0);
-        res[3] = self.safi.0;
+        byteorder::NetworkEndian::write_u16(&mut res[..2], self.afi.into());
+        res[3] = self.safi.into();
         Ok(res.to_vec())
     }
     fn wire_len(&self, _: &ParserContext) -> Result<u16, &'static str> {
@@ -192,16 +192,15 @@ impl WritablePacket for RouteRefreshMessage {
 
 impl ReadablePacket for RouteRefreshMessage {
     fn from_wire<'a>(
-        _: &ParserContext,
+        ctx: &ParserContext,
         buf: &'a [u8],
     ) -> IResult<&'a [u8], Self, BGPParserError<&'a [u8]>> {
-        let (buf, (afi_raw, _, safi_raw)) = nom::combinator::complete(nom::sequence::tuple((
-            nom::number::complete::be_u16,
+        let (buf, (afi, _, safi)) = nom::combinator::complete(nom::sequence::tuple((
+            |i| AddressFamilyIdentifier::from_wire(ctx, i),
             nom::bytes::complete::take(1u8),
-            nom::number::complete::be_u8,
+            |i| SubsequentAddressFamilyIdentifier::from_wire(ctx, i),
         )))(buf)?;
-        let afi = AddressFamilyIdentifier(afi_raw);
-        let safi = SubsequentAddressFamilyIdentifier(safi_raw);
+
         IResult::Ok((buf, RouteRefreshMessage { afi, safi }))
     }
 }
@@ -546,7 +545,7 @@ impl Display for UpdateMessage {
 mod tests {
     use super::BGPMessage;
     use super::Codec;
-    use crate::bgp_packet::constants::address_family_identifier_values::IPV6;
+    use crate::bgp_packet::constants::AddressFamilyIdentifier::Ipv6;
     use crate::bgp_packet::traits::ParserContext;
     use crate::bgp_packet::traits::ReadablePacket;
     use crate::bgp_packet::traits::WritablePacket;
@@ -563,7 +562,7 @@ mod tests {
             0x02, 0x02, 0x00, 0x02, 0x02, 0x46, 0x00, 0x02, 0x06, 0x41, 0x04, 0x00, 0x00, 0x00,
             0x2a,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let (buf, result) = BGPMessage::from_wire(ctx, open_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
@@ -582,7 +581,7 @@ mod tests {
             0x18, 0x02, 0x06, 0x01, 0x04, 0x00, 0x02, 0x00, 0x01, 0x02, 0x02, 0x02, 0x00, 0x02,
             0x02, 0x80, 0x00, 0x02, 0x06, 0x41, 0x04, 0x00, 0x00, 0x22, 0x36,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let (buf, result) = BGPMessage::from_wire(ctx, open_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
@@ -606,7 +605,7 @@ mod tests {
             0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x00,
             0x14, 0x00, 0x00, 0x00, 0x0a, 0x18, 0xcb, 0x01, 0x4e,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(IPV6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
         let (buf, result) = BGPMessage::from_wire(ctx, update_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
@@ -623,7 +622,7 @@ mod tests {
         let codec = &mut Codec {
             ctx: ParserContext {
                 four_octet_asn: Some(true),
-                nlri_mode: Some(IPV6),
+                nlri_mode: Some(Ipv6),
             },
         };
         let mut buf = bytes::BytesMut::from(update_msg_bytes);
@@ -649,7 +648,7 @@ mod tests {
         let codec = &mut Codec {
             ctx: ParserContext {
                 four_octet_asn: Some(true),
-                nlri_mode: Some(IPV6),
+                nlri_mode: Some(Ipv6),
             },
         };
         let mut buf = bytes::BytesMut::from(update_msg_bytes);
@@ -683,7 +682,7 @@ mod tests {
         let codec = &mut Codec {
             ctx: ParserContext {
                 four_octet_asn: Some(true),
-                nlri_mode: Some(IPV6),
+                nlri_mode: Some(Ipv6),
             },
         };
         let mut buf = bytes::BytesMut::from(update_msg_bytes);
