@@ -546,6 +546,7 @@ mod tests {
     use super::BGPMessage;
     use super::Codec;
     use crate::bgp_packet::constants::AddressFamilyIdentifier::Ipv6;
+    use crate::bgp_packet::messages::AddressFamilyIdentifier::Ipv4;
     use crate::bgp_packet::traits::ParserContext;
     use crate::bgp_packet::traits::ReadablePacket;
     use crate::bgp_packet::traits::WritablePacket;
@@ -562,7 +563,7 @@ mod tests {
             0x02, 0x02, 0x00, 0x02, 0x02, 0x46, 0x00, 0x02, 0x06, 0x41, 0x04, 0x00, 0x00, 0x00,
             0x2a,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv4);
         let (buf, result) = BGPMessage::from_wire(ctx, open_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
@@ -581,7 +582,7 @@ mod tests {
             0x18, 0x02, 0x06, 0x01, 0x04, 0x00, 0x02, 0x00, 0x01, 0x02, 0x02, 0x02, 0x00, 0x02,
             0x02, 0x80, 0x00, 0x02, 0x06, 0x41, 0x04, 0x00, 0x00, 0x22, 0x36,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv4);
         let (buf, result) = BGPMessage::from_wire(ctx, open_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
@@ -605,11 +606,11 @@ mod tests {
             0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x00,
             0x14, 0x00, 0x00, 0x00, 0x0a, 0x18, 0xcb, 0x01, 0x4e,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv4);
         let (buf, result) = BGPMessage::from_wire(ctx, update_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
-        let want_str = "UpdateMessage [ withdrawn: NLRI: afi: Ipv6, prefixlen: 24, prefix: [cb, 1, 4e]Origin: UnknownAS Path: { Segment [ Type: AS_SEGMENT 39540 57118 29691 1299 4739  ]] }NextHop: 185.95.219.36Communities: [  1299:35000,  29691:4000,  29691:4021,  39540:4000,  39540:4010,  57118:2000,  57118:2010,  ] LargeCommunities: [ 57118:20:0,  57118:20:10, ] ]";
+        let want_str = "UpdateMessage [ withdrawn: 203.1.78.0/24Origin: UnknownAS Path: { Segment [ Type: AS_SEGMENT 39540 57118 29691 1299 4739  ]] }NextHop: 185.95.219.36Communities: [  1299:35000,  29691:4000,  29691:4021,  39540:4000,  39540:4010,  57118:2000,  57118:2010,  ] LargeCommunities: [ 57118:20:0,  57118:20:10, ] ]";
         assert_eq!(format!("{}", result), want_str);
 
         let reencoded = result.to_wire(&ctx).unwrap();

@@ -17,7 +17,6 @@ use crate::bgp_packet::traits::BGPParserError;
 use crate::bgp_packet::traits::ParserContext;
 use crate::bgp_packet::traits::ReadablePacket;
 use crate::bgp_packet::traits::WritablePacket;
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use nom::bytes::complete::take;
 use nom::number::complete::be_u8;
 use nom::Err::Failure;
@@ -26,6 +25,7 @@ use serde::Serialize;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
+use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 
@@ -130,13 +130,16 @@ impl TryFrom<NLRI> for Ipv4Addr {
 }
 
 impl TryInto<IpAddr> for NLRI {
-    type Error = &'static str;
+    type Error = std::io::Error;
     fn try_into(self) -> Result<IpAddr, Self::Error> {
         match self.afi {
             AddressFamilyIdentifier::Ipv4 => {
                 let mut v: [u8; 4] = [0u8; 4];
                 if self.prefix.len() > v.len() {
-                    return Err("prefix length greater than IPv4 address length");
+                    return Err(std::io::Error::new(
+                        ErrorKind::InvalidData,
+                        "prefix length greater than IPv4 address length",
+                    ));
                 }
                 for (pos, e) in self.prefix.iter().enumerate() {
                     v[pos] = *e;
@@ -147,7 +150,10 @@ impl TryInto<IpAddr> for NLRI {
             AddressFamilyIdentifier::Ipv6 => {
                 let mut v: [u8; 16] = [0u8; 16];
                 if self.prefix.len() > v.len() {
-                    return Err("prefix length greater than IPv6 address length");
+                    return Err(std::io::Error::new(
+                        ErrorKind::InvalidData,
+                        "prefix length greater than IPv6 address length",
+                    ));
                 }
                 for (pos, e) in self.prefix.iter().enumerate() {
                     v[pos] = *e;
@@ -155,23 +161,6 @@ impl TryInto<IpAddr> for NLRI {
                 let ip6: Ipv6Addr = v.into();
                 Ok(IpAddr::V6(ip6))
             }
-            _ => Err("Unsupported AFI type"),
-        }
-    }
-}
-
-impl TryInto<IpNet> for NLRI {
-    type Error = &'static str;
-    fn try_into(self) -> Result<IpNet, Self::Error> {
-        let prefix_len = self.prefixlen;
-        let ip_addr: IpAddr = self.try_into()?;
-        match ip_addr {
-            IpAddr::V4(a) => Ok(IpNet::V4(
-                Ipv4Net::new(a, prefix_len).map_err(|_| "Invalid prefixlen")?,
-            )),
-            IpAddr::V6(a) => Ok(IpNet::V6(
-                Ipv6Net::new(a, prefix_len).map_err(|_| "Invalid prefixlen")?,
-            )),
         }
     }
 }
@@ -236,11 +225,27 @@ impl WritablePacket for NLRI {
 
 impl fmt::Display for NLRI {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "NLRI: afi: {}, prefixlen: {}, prefix: {:x?}",
-            self.afi, self.prefixlen, self.prefix
-        )
+        match self.afi {
+            AddressFamilyIdentifier::Ipv4 => {
+                let bytes = &mut self.prefix.clone();
+                if bytes.len() < 4 {
+                    bytes.extend(std::iter::repeat(0).take(4 - bytes.len()));
+                }
+                let four_bytes: [u8; 4] = bytes.as_slice().try_into().map_err(|_| fmt::Error {})?;
+                let ipv4_addr = Ipv4Addr::from(four_bytes);
+                write!(f, "{}/{}", ipv4_addr, self.prefixlen)
+            }
+            AddressFamilyIdentifier::Ipv6 => {
+                let bytes = &mut self.prefix.clone();
+                if bytes.len() < 16 {
+                    bytes.extend(std::iter::repeat(0).take(16 - bytes.len()));
+                }
+                let sixteen_bytes: [u8; 16] =
+                    bytes.as_slice().try_into().map_err(|_| fmt::Error {})?;
+                let ipv6_addr = Ipv6Addr::from(sixteen_bytes);
+                write!(f, "{}/{}", ipv6_addr, self.prefixlen)
+            }
+        }
     }
 }
 
@@ -285,25 +290,64 @@ mod tests {
     }
 
     #[test]
-    fn test_from_string() {
-        let cases: Vec<(String, Vec<u8>, u8)> = vec![
-            ("2001:db8::/32".into(), vec![0x20, 0x01, 0xd, 0xb8], 32),
-            ("2001:db8::1/16".into(), vec![0x20, 0x01], 16),
+    fn test_string_roundtrip() {
+        let cases: Vec<(String, Vec<u8>, u8, String)> = vec![
+            (
+                "2001:db8::/32".into(),
+                vec![0x20, 0x01, 0xd, 0xb8],
+                32,
+                "2001:db8::/32".into(),
+            ),
+            (
+                "2001:db8::1/16".into(),
+                vec![0x20, 0x01],
+                16,
+                "2001::/16".into(),
+            ),
             (
                 "2001:db8::/64".into(),
                 vec![0x20, 0x01, 0xd, 0xb8, 0, 0, 0, 0],
                 64,
+                "2001:db8::/64".into(),
             ),
-            ("2001:db8::/24".into(), vec![0x20, 0x01, 0xd], 24),
-            ("2001:db8::/0".into(), vec![], 0),
-            ("::/0".into(), vec![], 0),
-            ("10.0.0.0/8".into(), vec![10], 8),
+            (
+                "2001:db8::/24".into(),
+                vec![0x20, 0x01, 0xd],
+                24,
+                "2001:d00::/24".into(),
+            ),
+            ("2001:db8::/0".into(), vec![], 0, "::/0".into()),
+            ("::/0".into(), vec![], 0, "::/0".into()),
+            ("10.0.0.0/8".into(), vec![10], 8, "10.0.0.0/8".into()),
         ];
 
-        for case in cases {
-            let parsed_nlri = NLRI::try_from(case.0).unwrap();
-            assert_eq!(parsed_nlri.prefix, case.1);
-            assert_eq!(parsed_nlri.prefixlen, case.2);
+        for (i, case) in cases.iter().enumerate() {
+            let parsed_nlri = NLRI::try_from(case.0.clone()).unwrap();
+            assert_eq!(parsed_nlri.prefix, case.1, "Check prefix match ({})", i);
+            assert_eq!(
+                parsed_nlri.prefixlen, case.2,
+                "Check prefixlen match ({})",
+                i
+            );
+            assert_eq!(
+                case.3,
+                format!("{}", parsed_nlri),
+                "Check std::fmt::Display match ({})",
+                i
+            );
         }
     }
+
+    // #[test]
+    // fn test_to_string_invalids() {
+    //     let invalid_v4 = NLRI {
+    //         afi: AddressFamilyIdentifier::Ipv4,
+    //         prefix: vec![1, 2, 3, 4, 5],
+    //         prefixlen: 16,
+    //     };
+    //     assert_eq!(
+    //         "a formatting trait implementation returned an error: Error",
+    //         format!("{}", invalid_v4)
+    //     );
+    // }
 }

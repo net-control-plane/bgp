@@ -13,6 +13,10 @@ name = "route_client"
 path = "src/route_client/main.rs"
 
 [[bin]]
+name = "route_dump"
+path = "src/route_client/dump.rs"
+
+[[bin]]
 name = "streamer_cli"
 path = "src/streamer_cli/main.rs"
 
@@ -41,6 +45,7 @@ tracing-subscriber = "0.2"
 treebitmap = "0.4.0"
 warp = "0.3"
 rtnetlink = "0.9.1"
+netlink-packet-route = "0.11.0"
 
 netlink = { path = "../netlink" }
 

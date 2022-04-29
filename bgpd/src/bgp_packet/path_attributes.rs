@@ -1136,10 +1136,10 @@ mod tests {
             0x00, 0x02, // IPv6
             0x01, // Unicast
             0x10, // Length of IPv6 nexthop
-            0x20, 0x01, 0xdb, 0x08, 0x00, 0x00, 0x00, 0x00, // nh addr part one
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, // nh addr part one
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, // nh addr part two
             0x00, // Reserved
-            0x20, 0x20, 0x01, 0xdb, 0x08, // NLRI 1
+            0x20, 0x20, 0x01, 0x0d, 0xb8, // NLRI 1
             0x10, 0xfe, 0x80, // NLRI 2
         ];
         let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
@@ -1150,19 +1150,13 @@ mod tests {
         assert_eq!(
             result.1.nexthop,
             vec![
-                0x20, 0x01, 0xdb, 0x08, 0x00, 0x00, 0x00, 0x00, // nh addr part one
+                0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, // nh addr part one
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, // nh addr part two
             ]
         );
         assert_eq!(result.1.nlris.len(), 2);
-        assert_eq!(
-            format!("{}", result.1.nlris[0]),
-            "NLRI: afi: Ipv6, prefixlen: 32, prefix: [20, 1, db, 8]"
-        );
-        assert_eq!(
-            format!("{}", result.1.nlris[1]),
-            "NLRI: afi: Ipv6, prefixlen: 16, prefix: [fe, 80]"
-        );
+        assert_eq!(format!("{}", result.1.nlris[0]), "2001:db8::/32");
+        assert_eq!(format!("{}", result.1.nlris[1]), "fe80::/16");
         assert_eq!(result.0.len(), 0);
 
         let wire: Vec<u8> = result.1.to_wire(ctx).unwrap();
@@ -1175,7 +1169,7 @@ mod tests {
         let mp_unreach_bytes: &[u8] = &[
             0x00, 0x02, // IPv6
             0x01, // Unicast
-            0x20, 0x20, 0x01, 0xdb, 0x08, // NLRI 1
+            0x20, 0x20, 0x01, 0x0d, 0xb8, // NLRI 1
             0x10, 0xfe, 0x80, // NLRI 2
         ];
         let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
@@ -1184,14 +1178,8 @@ mod tests {
         assert_eq!(result.1.afi, Ipv6);
         assert_eq!(result.1.safi, Unicast);
         assert_eq!(result.1.nlris.len(), 2);
-        assert_eq!(
-            format!("{}", result.1.nlris[0]),
-            "NLRI: afi: Ipv6, prefixlen: 32, prefix: [20, 1, db, 8]"
-        );
-        assert_eq!(
-            format!("{}", result.1.nlris[1]),
-            "NLRI: afi: Ipv6, prefixlen: 16, prefix: [fe, 80]"
-        );
+        assert_eq!(format!("{}", result.1.nlris[0]), "2001:db8::/32");
+        assert_eq!(format!("{}", result.1.nlris[1]), "fe80::/16");
         assert_eq!(result.0.len(), 0);
 
         let wire: Vec<u8> = result.1.to_wire(ctx).unwrap();

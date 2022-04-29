@@ -370,7 +370,7 @@ where
         shutdown: broadcast::Receiver<()>,
     ) -> PeerStateMachine<A> {
         let afi = config.afi;
-        return PeerStateMachine {
+        PeerStateMachine {
             server_config,
             config,
             peer_open_msg: None,
@@ -392,7 +392,7 @@ where
             keepalive_timer: None,
             read_cancel_token: None,
             shutdown,
-        };
+        }
     }
 
     // run implements the main loop of the peer state machine and drives the
@@ -681,16 +681,15 @@ where
         }
 
         // Close the TCP stream.
-        match self.tcp_stream.as_mut() {
-            Some(stream) => match stream.shutdown().await {
+        if let Some(stream) = self.tcp_stream.as_mut() {
+            match stream.shutdown().await {
                 Ok(_) => info!("Closed TCP stream with peer: {}", self.config.name),
                 Err(e) => warn!(
                     "Failed to close TCP stream with peer {}: {}",
                     self.config.name,
                     e.to_string()
                 ),
-            },
-            None => {}
+            }
         }
 
         // Iterate over every route that we've announced to the route manager
@@ -846,7 +845,7 @@ where
             }
         }
 
-        if route_update.prefixes.len() > 0 {
+        if !route_update.prefixes.is_empty() {
             self.route_manager
                 .send(RouteManagerCommands::Update(RouteUpdate::Announce(
                     route_update,
@@ -859,16 +858,16 @@ where
 
     fn decide_accept_prefix(&mut self, _: A, _: u8) -> bool {
         // TODO: Implement filtering of prefixes.
-        return true;
+        true
     }
 
-    fn decide_accept_message(&mut self, _: &Vec<PathAttribute>) -> bool {
+    fn decide_accept_message(&mut self, _: &[PathAttribute]) -> bool {
         // TODO: Implement filtering of Update messages.
 
         // TODO: Section 9.1.2 of RFC 4271:
         // * Reject the message if the next hop is not resolvable
         // * Reject the message if there is an AS loop
-        return true;
+        true
     }
 
     /// try_connect attempts to connect to a remote TCP endpoint with a given timeout.
@@ -925,14 +924,20 @@ where
         // In the active state a new connection should come in via the NewConnection
         // message on the PSM channel, or if we establish a connection out, then that
         // logic should handle the messages until OpenSent.
-        return Err(format!("Discarding message received in ACTIVE state: {:?}", msg).to_string());
+        return Err(format!(
+            "Discarding message received in ACTIVE state: {:?}",
+            msg
+        ));
     }
 
     async fn handle_connect_msg(&mut self, msg: BGPSubmessage) -> Result<(), String> {
         // In the connect state a new connection should come in via the NewConnection
         // message on the PSM channel, or if we establish a connection out, then that
         // logic should handle the messages until OpenSent.
-        return Err(format!("Discarding message received in CONNECT state: {:?}", msg).to_string());
+        return Err(format!(
+            "Discarding message received in CONNECT state: {:?}",
+            msg
+        ));
     }
 
     // In the opensent state we still need to get the OPEN message from the peer
@@ -947,11 +952,8 @@ where
                         self.config.name, o.asn
                     );
                     self.state = BGPState::Active;
-                    match self.tcp_stream.as_mut() {
-                        Some(stream) => {
-                            stream.shutdown().await.map_err(|e| e.to_string())?;
-                        }
-                        None => {}
+                    if let Some(stream) = self.tcp_stream.as_mut() {
+                        stream.shutdown().await.map_err(|e| e.to_string())?;
                     }
                 }
 
@@ -1207,7 +1209,6 @@ where
                     .path_attributes
                     .push(PathAttribute::MPReachNLRIPathAttribute(mp_reach));
             }
-            _ => return Err("Unknown AFI in config".to_string()),
         }
 
         if let Some(large_communities) = &announcement.large_communities {

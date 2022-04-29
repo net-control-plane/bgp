@@ -225,7 +225,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let run_v4 = {
         let server_addr = server_addr.clone();
-        let dry_run = dry_run.clone();
         async move {
             run_connector_v4(&server_addr, rt_table, dry_run)
                 .await

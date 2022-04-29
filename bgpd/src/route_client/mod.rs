@@ -13,4 +13,4 @@
 // limitations under the License.
 
 pub mod fib_state;
-mod netlink;
+pub mod netlink;
