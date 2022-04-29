@@ -24,6 +24,17 @@ The current state of the code is a barely functional proof of concept. Rayhaan u
 
 There are an abundance of opportunities to contribute to the project, to make it fully standards compliant, and achieve the goals of full programmability. If you are interested please reach out to `rayhaan (at rayhaan (with ccTLD ch))`.
 
+### 🔥 P0
+
+* Implementation of `route_client` to be able to properly install routes into the kernel.
+* Route filters for inbound routes.
+* Forwarding routes to peers.
+
+### 🕯️ P1
+
+* Monitoring and status of sessions with peers (to be able to detect peer down etc)
+* More comprehensive integration tests (to cover route acceptance / filters / propagation to RIB / forwarding / availability in the API etc).
+
 ### RFCs
 
 The following are the RFCs that were consulted during the writing of the daemon so far, and there are certainly parts that are not yet covered, so this list will have to be revisited to check conformance / file bugs to track where the gaps are.
