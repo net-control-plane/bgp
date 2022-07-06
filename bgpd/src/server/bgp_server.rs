@@ -409,7 +409,7 @@ impl Server {
                         warn!("Should not reach here");
                     }));
                 }
-                AddressFamilyIdentifier::Ipv6 => {
+                AddressFamilyIdentifier::Ipv4 => {
                     let mut psm = PeerStateMachine::<Ipv4Addr>::new(
                         self.config.clone(),
                         peer_config.clone(),
