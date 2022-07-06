@@ -42,7 +42,7 @@ tokio-util = { version = "0.6.7", features = ["codec"] }
 tonic = { version = "0.5", features = ["compression"] }
 tracing = "0.1"
 tracing-subscriber = "0.2"
-treebitmap = "0.4.0"
+ip_network_table-deps-treebitmap = "0.5.0"
 warp = "0.3"
 rtnetlink = "0.9.1"
 netlink-packet-route = "0.11.0"

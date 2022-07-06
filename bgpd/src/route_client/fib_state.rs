@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::bgp_packet::nlri::NLRI;
+use ip_network_table_deps_treebitmap::address::Address;
+use ip_network_table_deps_treebitmap::IpLookupTable;
 use netlink::netlink_interface::NetlinkInterface;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Formatter;
@@ -21,8 +23,6 @@ use std::net::Ipv6Addr;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::{trace, warn};
-use treebitmap::address::Address;
-use treebitmap::IpLookupTable;
 
 /// fib_state implements the logic to maintain forwarding routes in the FIB.
 /// This for now means the Linux Kernel via Netlink, but in the future can

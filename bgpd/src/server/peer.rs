@@ -46,6 +46,8 @@ use crate::server::data_structures::RouteWithdraw;
 use crate::server::data_structures::{RouteInfo, RouteUpdate};
 use crate::server::rib_manager::RouteManagerCommands;
 use bytes::BytesMut;
+use ip_network_table_deps_treebitmap::address::Address;
+use ip_network_table_deps_treebitmap::IpLookupTable;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::net::IpAddr;
@@ -65,8 +67,6 @@ use tokio::task::JoinHandle;
 use tokio_util::codec::{Decoder, Encoder};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
-use treebitmap::address::Address;
-use treebitmap::IpLookupTable;
 
 type PeerInterface = mpsc::UnboundedSender<PeerCommands>;
 

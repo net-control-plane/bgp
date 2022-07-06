@@ -29,9 +29,9 @@ use bgpd::server::route_server::route_server::{
 };
 use netlink::netlink_interface::NetlinkInterface;
 
+use ip_network_table_deps_treebitmap::IpLookupTable;
 use tonic::transport::Endpoint;
 use tracing::{info, warn};
-use treebitmap::IpLookupTable;
 
 fn vec_to_array<T, const N: usize>(v: Vec<T>) -> Result<[T; N], anyhow::Error> {
     v.try_into()

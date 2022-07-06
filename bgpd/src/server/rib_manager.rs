@@ -27,12 +27,12 @@ use std::cmp::Eq;
 use std::collections::HashMap;
 use std::convert::TryInto;
 
+use ip_network_table_deps_treebitmap::address::Address;
 use serde::Serialize;
 use std::sync::Mutex;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use treebitmap::address::Address;
 
 use super::data_structures::RouteWithdraw;
 
@@ -110,7 +110,7 @@ pub struct RibManager<A: Address> {
     peers: HashMap<String, (PeerConfig, PeerInterface)>,
 
     // We need to use a mutex for PathSet because IpLookupTable does not return a mut ptr.
-    rib: treebitmap::IpLookupTable<A, Mutex<PathSet<A>>>,
+    rib: ip_network_table_deps_treebitmap::IpLookupTable<A, Mutex<PathSet<A>>>,
     epoch: u64,
 
     // Handle for streaming updates to PathSets in the RIB.
@@ -134,7 +134,7 @@ where
         Ok(RibManager::<A> {
             mgr_rx: chan,
             peers: HashMap::new(),
-            rib: treebitmap::IpLookupTable::new(),
+            rib: ip_network_table_deps_treebitmap::IpLookupTable::new(),
             epoch: 0,
             pathset_streaming_handle: pathset_tx,
             shutdown,
