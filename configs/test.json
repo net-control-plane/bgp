@@ -11,8 +11,8 @@
 			"name": "sample_peer",
 			"ip": "2a0d:d740:105:0:af9d:7b05:a881:2e91",
 			"asn": 210036,
-			"afi": 2,
-			"safi": 1,
+			"afi": "Ipv4",
+			"safi": "Unicast",
 			"local_pref": 100,
 			"announcements": [
 				{

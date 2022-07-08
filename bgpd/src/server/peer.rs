@@ -66,7 +66,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::codec::{Decoder, Encoder};
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 type PeerInterface = mpsc::UnboundedSender<PeerCommands>;
 
@@ -232,8 +232,11 @@ async fn parse_incoming_msgs(
                 match len_res {
                     Err(e) => {
                         warn!("Failed to read from buf: {}", e);
-                        // XXX: Put the right error here.
-                        return Ok(())
+                        // Send a message that the connection has been closed.
+                        iface
+                            .send(PeerCommands::ConnectionClosed())
+                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                        return Err(e);
                     }
                     Ok(len) => {
                         if len == 0 {
@@ -245,7 +248,7 @@ async fn parse_incoming_msgs(
                                 iface
                                     .send(PeerCommands::ConnectionClosed())
                                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-                                info!("Exiting handler");
+                                info!("Exiting handler due to connection close");
                                 return Ok(());
                         }
 
@@ -613,11 +616,11 @@ where
                     }
                 }
                 PeerTimerEvent::HoldTimerExpire() => {
-                    info!("Hold timer expired");
+                    trace!("Hold timer expired");
                     self.hold_timer_expired().await?;
                 }
                 PeerTimerEvent::KeepaliveTimerExpire() => {
-                    info!("Keepalive timer expired");
+                    trace!("Keepalive timer expired");
                     self.send_keepalive().await?;
                 }
             },

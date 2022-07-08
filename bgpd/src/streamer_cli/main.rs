@@ -18,11 +18,24 @@ use bgpd::server::route_server::route_server::route_service_client::RouteService
 use bgpd::server::route_server::route_server::DumpPathsRequest;
 use bgpd::server::route_server::route_server::PathSet;
 use bgpd::server::route_server::route_server::StreamPathsRequest;
+use clap::Parser;
 use std::process::exit;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tonic::transport::Endpoint;
 use tracing::{info, warn};
+
+extern crate clap;
+
+#[derive(clap::Parser)]
+#[clap(
+    author = "Rayhaan Jaufeerally <rayhaan@rayhaan.ch>",
+    version = "0.1",
+    about = "A program to install routes from BGP into the Linux control plane"
+)]
+struct Cli {
+    server_address: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
@@ -36,8 +49,10 @@ async fn main() -> Result<(), String> {
         }
     }
 
+    let cli = Cli::parse();
+
     info!("Starting client");
-    let grpc_endpoint = "http://193.36.105.1:9180";
+    let grpc_endpoint = cli.server_address;
     let endpoint = Endpoint::from_shared(grpc_endpoint)
         .map_err(|e| e.to_string())?
         .keep_alive_timeout(Duration::from_secs(10));
