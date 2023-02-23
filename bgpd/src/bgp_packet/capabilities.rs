@@ -201,7 +201,7 @@ pub mod BGPCapabilityTypeValues {
     pub const ROUTE_REFRESH_BGP4: BGPCapabilityType = BGPCapabilityType(2);
     /// Outbound Route Filtering Capability [RFC5291]
     pub const OUTBOUND_ROUTE_FILTERING: BGPCapabilityType = BGPCapabilityType(3);
-    /// Extended Next Hop Encoding [RFC5549]
+    /// Extended Next Hop Encoding [RFC8950]
     pub const EXTENDED_NEXT_HOP: BGPCapabilityType = BGPCapabilityType(5);
     /// BGP Extended Message [RFC8654]
     pub const EXTENDED_MESSAGE: BGPCapabilityType = BGPCapabilityType(6);
@@ -248,6 +248,7 @@ impl ReadablePacket for BGPCapability {
                     })(buf)?;
                     (buf, BGPCapabilityValue::Multiprotocol(cap))
                 }
+                // TODO: Add extended next hop.
                 BGPCapabilityTypeValues::ROUTE_REFRESH_BGP4 => {
                     let (buf, _) = be_u8(buf)?;
                     let (buf, cap) = nom::multi::length_value(be_u8, |i| {
@@ -616,12 +617,81 @@ impl fmt::Display for GracefulRestartCapability {
     }
 }
 
+// RFC8950 - Advertising IPv4 NLRI with IPv6 next hop.
+// GracefulRestartPayload represents the contents of the graceful restart cap.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExtendedNextHopEncodingCapability {
+    pub afi_safi_nhafi: Vec<(
+        AddressFamilyIdentifier,
+        SubsequentAddressFamilyIdentifier,
+        AddressFamilyIdentifier,
+    )>,
+}
+
+impl WritablePacket for ExtendedNextHopEncodingCapability {
+    fn to_wire(&self, _ctx: &ParserContext) -> Result<Vec<u8>, &'static str> {
+        Ok(self
+            .afi_safi_nhafi
+            .iter()
+            .map(|e| {
+                Into::<Vec<u8>>::into(e.0)
+                    .into_iter()
+                    .chain(vec![0x00, Into::<u8>::into(e.1)].into_iter())
+                    .chain(Into::<Vec<u8>>::into(e.2).into_iter())
+                    .collect::<Vec<u8>>()
+            })
+            .flatten()
+            .collect::<Vec<u8>>())
+    }
+
+    fn wire_len(&self, _ctx: &ParserContext) -> Result<u16, &'static str> {
+        Ok((self.afi_safi_nhafi.len() * 6) as u16)
+    }
+}
+
+impl ReadablePacket for ExtendedNextHopEncodingCapability {
+    fn from_wire<'a>(
+        ctx: &ParserContext,
+        buf: &'a [u8],
+    ) -> IResult<&'a [u8], Self, BGPParserError<&'a [u8]>>
+    where
+        Self: Sized,
+    {
+        let (buf, tuples) = nom::combinator::complete(nom::multi::many0(nom::sequence::tuple((
+            |i| AddressFamilyIdentifier::from_wire(ctx, i),
+            |i| {
+                let (buf, _) = be_u8(i)?; // Eat the 0 byte.
+                SubsequentAddressFamilyIdentifier::from_wire(ctx, buf)
+            },
+            |i| AddressFamilyIdentifier::from_wire(ctx, i),
+        ))))(buf)?;
+
+        IResult::Ok((
+            buf,
+            Self {
+                afi_safi_nhafi: tuples,
+            },
+        ))
+    }
+}
+
+impl fmt::Display for ExtendedNextHopEncodingCapability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ExtendednextHopEncodingCapability [")?;
+        for entry in &self.afi_safi_nhafi {
+            write!(f, "afi: {}, safi: {}, nhafi: {}", entry.0, entry.1, entry.2)?;
+        }
+        write!(f, "]")
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::BGPCapability;
     use super::BGPCapabilityTypeValues;
     use super::BGPCapabilityValue;
+    use super::ExtendedNextHopEncodingCapability;
     use super::FourByteASNCapability;
     use super::OpenOption;
     use crate::bgp_packet::constants::AddressFamilyIdentifier::Ipv6;
@@ -656,5 +726,16 @@ mod tests {
 
         let expected_str = "[OpenOption { option_type: BGPOpenOptionType(2), oval: Capabilities(OpenOptionCapabilities { caps: [BGPCapability { cap_type: BGPCapabilityType(1), val: Multiprotocol(MultiprotocolCapability { afi: Ipv4, safi: Unicast }) }] }) }, OpenOption { option_type: BGPOpenOptionType(2), oval: Capabilities(OpenOptionCapabilities { caps: [BGPCapability { cap_type: BGPCapabilityType(128), val: UnknownCapability(UnknownCapability { cap_code: 128, payload: [] }) }] }) }, OpenOption { option_type: BGPOpenOptionType(2), oval: Capabilities(OpenOptionCapabilities { caps: [BGPCapability { cap_type: BGPCapabilityType(2), val: RouteRefresh(RouteRefreshCapability) }] }) }, OpenOption { option_type: BGPOpenOptionType(2), oval: Capabilities(OpenOptionCapabilities { caps: [BGPCapability { cap_type: BGPCapabilityType(70), val: UnknownCapability(UnknownCapability { cap_code: 70, payload: [] }) }] }) }, OpenOption { option_type: BGPOpenOptionType(2), oval: Capabilities(OpenOptionCapabilities { caps: [BGPCapability { cap_type: BGPCapabilityType(65), val: FourByteASN(FourByteASNCapability { asn: 42 }) }] }) }]";
         assert_eq!(format!("{:?}", result), expected_str);
+    }
+
+    #[test]
+    fn test_extended_next_hop_encoding_capability() {
+        let bytes: Vec<u8> = vec![0x00, 0x01, 0x00, 0x01, 0x00, 0x02];
+        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let (_, cap) = ExtendedNextHopEncodingCapability::from_wire(ctx, &bytes).unwrap();
+
+        let expected_str =
+            "ExtendednextHopEncodingCapability [afi: Ipv4, safi: Unicast, nhafi: Ipv6]";
+        assert_eq!(expected_str, cap.to_string());
     }
 }

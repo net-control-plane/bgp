@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use bgpd::route_client::netlink::NetlinkConnector;
-use bgpd::route_client::southbound_interface::DummyVerifier;
 use bgpd::route_client::southbound_interface::SouthboundInterface;
 use clap::Parser;
 use log::trace;

@@ -1276,6 +1276,7 @@ where
                 for attr in &u.path_attributes {
                     match attr {
                         PathAttribute::MPReachNLRIPathAttribute(nlri) => {
+                            // TODO: Determine which AFI/SAFI this update corresponds to.
                             let nexthop_res = nlri.clone().nexthop_to_v6();
                             // TODO: How do we pick whether to use the global or LLNH?
                             if let Some((global, _llnh_opt)) = nexthop_res {
@@ -1287,6 +1288,7 @@ where
                             }
                         }
                         PathAttribute::MPUnreachNLRIPathAttribute(nlri) => {
+                            // TODO: Determine which AFI/SAFI this update corresponds to.
                             self.process_withdrawals(nlri.nlris.clone())?;
                         }
                         _ => {}

@@ -50,6 +50,15 @@ impl TryFrom<u16> for AddressFamilyIdentifier {
     }
 }
 
+impl Into<Vec<u8>> for AddressFamilyIdentifier {
+    fn into(self) -> Vec<u8> {
+        match self {
+            Self::Ipv4 => 1_u16.to_be_bytes().to_vec(),
+            Self::Ipv6 => 2_u16.to_be_bytes().to_vec(),
+        }
+    }
+}
+
 /// This parser for AFI makes it easier to write the other message parsers.
 impl ReadablePacket for AddressFamilyIdentifier {
     fn from_wire<'a>(
@@ -80,6 +89,9 @@ impl fmt::Display for AddressFamilyIdentifier {
 pub enum SubsequentAddressFamilyIdentifier {
     Unicast,
     Multicast,
+    NlriWithMpls,
+    MplsLabeledVPN,
+    MulticastMplsVpn,
 }
 
 impl Into<u8> for SubsequentAddressFamilyIdentifier {
@@ -87,6 +99,9 @@ impl Into<u8> for SubsequentAddressFamilyIdentifier {
         match self {
             Self::Unicast => 1,
             Self::Multicast => 2,
+            Self::NlriWithMpls => 4,
+            Self::MplsLabeledVPN => 128,
+            Self::MulticastMplsVpn => 129,
         }
     }
 }
@@ -97,6 +112,9 @@ impl TryFrom<u8> for SubsequentAddressFamilyIdentifier {
         match i {
             1 => Ok(Self::Unicast),
             2 => Ok(Self::Multicast),
+            4 => Ok(Self::NlriWithMpls),
+            128 => Ok(Self::MplsLabeledVPN),
+            129 => Ok(Self::MulticastMplsVpn),
             _ => Err(std::io::Error::new(
                 ErrorKind::InvalidInput,
                 format!("Unknown SAFI value: {} ", i),
@@ -125,6 +143,9 @@ impl fmt::Display for SubsequentAddressFamilyIdentifier {
         match self {
             Self::Unicast => write!(f, "Unicast"),
             Self::Multicast => write!(f, "Multicast"),
+            Self::NlriWithMpls => write!(f, "NlriWithMpls"),
+            Self::MulticastMplsVpn => write!(f, "MulticastMplsVpn"),
+            Self::MplsLabeledVPN => write!(f, "MplsLabeledVpn"),
         }
     }
 }
