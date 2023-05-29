@@ -2,7 +2,7 @@
 
 members = [
     "bgpd",
-    "netlink",
+#   "netlink",
 
     # Tests
     "tests/integration_tests"

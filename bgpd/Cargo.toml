@@ -8,16 +8,16 @@ edition = "2021"
 name = "bgp_server"
 path = "src/main.rs"
 
-[[bin]]
-name = "route_client"
-path = "src/route_client/main.rs"
+#[[bin]]
+#name = "route_client"
+#path = "src/route_client/main.rs"
 
 [[bin]]
 name = "streamer_cli"
 path = "src/streamer_cli/main.rs"
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = "1.0.71"
 byteorder = "1.4.3"
 bytes = "1.*"
 clap = {version = "3.2.8", features = ["cargo", "derive"]}
@@ -25,7 +25,7 @@ futures = "0.3"
 ipnet = "2.3.0"
 libc = "0.2.126"
 log = "0.4"
-nom = "6.1.2"
+nom = "7.1"
 prost = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.64"
@@ -37,13 +37,10 @@ tokio-stream = { version = "0.1.7", features = ["net"] }
 tokio-util = { version = "0.6.7", features = ["codec"] }
 tonic = { version = "0.5", features = ["compression"] }
 tracing = "0.1"
-tracing-subscriber = "0.2"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 ip_network_table-deps-treebitmap = "0.5.0"
-warp = "0.3"
-rtnetlink = "0.9.1"
-netlink-packet-route = "0.11.0"
-netlink = { path = "../netlink" }
-neli = "0.6.2"
+warp = "0.3.5"
+# neli = "0.6.2"
 async-trait = "0.1.57"
 
 [build-dependencies]
