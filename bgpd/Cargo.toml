@@ -1,47 +1,50 @@
 [package]
-name = "bgpd"
-version = "0.1.0"
 authors = ["Rayhaan Jaufeerally <rayhaan@rayhaan.ch>"]
 edition = "2021"
+name    = "bgpd"
+version = "0.1.0"
 
 [[bin]]
 name = "bgp_server"
 path = "src/main.rs"
 
-#[[bin]]
-#name = "route_client"
-#path = "src/route_client/main.rs"
+[[bin]]
+name = "route_client"
+path = "src/route_client/main.rs"
 
 [[bin]]
 name = "streamer_cli"
 path = "src/streamer_cli/main.rs"
 
 [dependencies]
-anyhow = "1.0.71"
-byteorder = "1.4.3"
-bytes = "1.*"
-clap = {version = "3.2.8", features = ["cargo", "derive"]}
-futures = "0.3"
-ipnet = "2.3.0"
-libc = "0.2.126"
-log = "0.4"
-nom = "7.1"
-prost = "0.8"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.64"
-signal-hook = { version = "0.3.10", features = ["extended-siginfo"] }
-signal-hook-tokio = "0.3.0"
-stderrlog = "0.5.1"
-tokio = { version = "1.13.0", features = ["full"] }
-tokio-stream = { version = "0.1.7", features = ["net"] }
-tokio-util = { version = "0.6.7", features = ["codec"] }
-tonic = { version = "0.5", features = ["compression"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+anyhow                           = "1.0.71"
+async-trait                      = "0.1.57"
+byteorder                        = "1.4.3"
+bytes                            = "1.*"
+clap                             = { version = "3.2.8", features = ["cargo", "derive"] }
+futures                          = "0.3"
 ip_network_table-deps-treebitmap = "0.5.0"
-warp = "0.3.5"
-# neli = "0.6.2"
-async-trait = "0.1.57"
+ipnet                            = "2.3.0"
+libc                             = "0.2.126"
+log                              = "0.4"
+netlink                          = "0.1.1"
+netlink-packet-route             = "0.19.0"
+netlink-packet-utils             = "0.5.2"
+nom                              = "7.1"
+prost                            = "0.8"
+rtnetlink                        = "0.14.1"
+serde                            = { version = "1.0", features = ["derive"] }
+serde_json                       = "1.0.64"
+signal-hook                      = { version = "0.3.17", features = ["extended-siginfo"] }
+signal-hook-tokio                = "0.3.0"
+stderrlog                        = "0.5.1"
+tokio                            = { version = "1.13.0", features = ["full"] }
+tokio-stream                     = { version = "0.1.7", features = ["net"] }
+tokio-util                       = { version = "0.6.7", features = ["codec"] }
+tonic                            = { version = "0.5", features = ["compression"] }
+tracing                          = "0.1"
+tracing-subscriber               = { version = "0.3.17", features = ["env-filter"] }
+warp                             = "0.3.5"
 
 [build-dependencies]
-tonic-build = { version = "0.5.1", features = ["prost", "compression"] }
+tonic-build = { version = "0.5.1", features = ["compression", "prost"] }

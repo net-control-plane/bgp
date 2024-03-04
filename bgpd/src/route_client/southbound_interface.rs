@@ -22,15 +22,16 @@ use log::info;
 /// SouthboundInterface provides a uniform API to network forwarding elements
 /// These are devices or targets that perform packet routing and are the end
 /// consumers of packet routing data.
-
 #[async_trait]
 pub trait SouthboundInterface {
+    /// route_add adds a route towards a particular address_family/NLRI via the given nexthop.
     async fn route_add(
         &mut self,
         address_family: AddressFamilyIdentifier,
         prefix: NLRI,
         nexthop: IpAddr,
     ) -> Result<()>;
+    /// route_del removes the route towards a particular prefix via a given nexthop.
     async fn route_del(&mut self, prefix: NLRI, nexthop: IpAddr) -> Result<()>;
 }
 

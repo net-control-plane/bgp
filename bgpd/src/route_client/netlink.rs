@@ -1,10 +1,15 @@
 use crate::bgp_packet::{constants::AddressFamilyIdentifier, nlri::NLRI};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use futures::TryStreamExt;
-use netlink::constants::RTN_UNICAST;
-use netlink_packet_route::{rtnl::route::nlas::Nla, RouteHeader};
-use netlink_packet_route::{RouteMessage, RTPROT_STATIC};
+use netlink_packet_route::route::RouteAddress;
+use netlink_packet_route::route::RouteAttribute;
+use netlink_packet_route::route::RouteHeader;
+use netlink_packet_route::route::RouteMessage;
+use netlink_packet_route::route::RouteProtocol;
+use netlink_packet_route::route::RouteType;
+use netlink_packet_route::AddressFamily as NetlinkAddressFamily;
+use netlink_packet_utils::nla::Nla;
 use rtnetlink::IpVersion;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::{convert::TryInto, io::ErrorKind};
@@ -29,7 +34,8 @@ impl SouthboundInterface for NetlinkConnector {
         let route = self.handle.route();
         match address_family {
             AddressFamilyIdentifier::Ipv6 => {
-                let addr: Ipv6Addr = match prefix.clone().try_into()? {
+                let prefix_len = prefix.prefixlen;
+                let addr: Ipv6Addr = match prefix.try_into()? {
                     IpAddr::V6(addr) => addr,
                     _ => {
                         return Err(anyhow::Error::from(std::io::Error::new(
@@ -50,7 +56,7 @@ impl SouthboundInterface for NetlinkConnector {
                 let mut mutation = route
                     .add()
                     .v6()
-                    .destination_prefix(addr, prefix.prefixlen)
+                    .destination_prefix(addr, prefix_len)
                     .gateway(gw_addr);
                 if let Some(table_id) = self.table {
                     mutation = mutation.table(table_id.try_into().unwrap());
@@ -58,6 +64,7 @@ impl SouthboundInterface for NetlinkConnector {
                 mutation.execute().await.map_err(|e| anyhow::Error::from(e))
             }
             AddressFamilyIdentifier::Ipv4 => {
+                let prefix_len = prefix.prefixlen;
                 let addr: Ipv4Addr = match prefix.clone().try_into()? {
                     IpAddr::V4(addr) => addr,
                     _ => {
@@ -79,7 +86,7 @@ impl SouthboundInterface for NetlinkConnector {
                 let mut mutation = route
                     .add()
                     .v4()
-                    .destination_prefix(addr, prefix.prefixlen)
+                    .destination_prefix(addr, prefix_len)
                     .gateway(gw_addr);
                 if let Some(table_id) = self.table {
                     mutation = mutation.table(table_id.try_into().unwrap());
@@ -90,55 +97,36 @@ impl SouthboundInterface for NetlinkConnector {
     }
 
     async fn route_del(&mut self, prefix: NLRI, nexthop: IpAddr) -> Result<()> {
-        let nh_octets = match nexthop {
-            IpAddr::V6(addr) => addr.octets().to_vec(),
-            IpAddr::V4(addr) => addr.octets().to_vec(),
-        };
         let rt_handle = self.handle.route();
-        let address_family = match prefix.afi {
-            AddressFamilyIdentifier::Ipv4 => netlink_packet_route::rtnl::constants::AF_INET as u8,
-            AddressFamilyIdentifier::Ipv6 => netlink_packet_route::rtnl::constants::AF_INET6 as u8,
-        };
-        let header = RouteHeader {
-            address_family,
-            destination_prefix_length: prefix.prefixlen,
-            table: self.table.unwrap_or(0) as u8,
-            protocol: RTPROT_STATIC,
-            kind: RTN_UNICAST,
-            ..Default::default()
-        };
-        let mut rt_msg = RouteMessage {
-            header,
-            ..Default::default()
-        };
-        let prefix_octets = match prefix.afi {
+        let destination = match prefix.afi {
             AddressFamilyIdentifier::Ipv4 => {
-                let addr: Ipv4Addr = match prefix.clone().try_into()? {
-                    IpAddr::V4(addr) => addr,
-                    _ => {
-                        return Err(anyhow::Error::from(std::io::Error::new(
-                            ErrorKind::InvalidInput,
-                            "Got non-IPv4 address from NLRI",
-                        )))
-                    }
-                };
-                addr.octets().to_vec()
+                RouteAddress::Inet(prefix.clone().try_into().map_err(|e: String| anyhow!(e))?)
             }
             AddressFamilyIdentifier::Ipv6 => {
-                let addr: Ipv6Addr = match prefix.clone().try_into()? {
-                    IpAddr::V6(addr) => addr,
-                    _ => {
-                        return Err(anyhow::Error::from(std::io::Error::new(
-                            ErrorKind::InvalidInput,
-                            "Got non-IPv6 address from NLRI",
-                        )))
-                    }
-                };
-                addr.octets().to_vec()
+                RouteAddress::Inet6(prefix.clone().try_into().map_err(|e: String| anyhow!(e))?)
             }
         };
-        rt_msg.nlas.push(Nla::Destination(prefix_octets));
-        rt_msg.nlas.push(Nla::Gateway(nh_octets));
+        let nexthop = match nexthop {
+            IpAddr::V4(ipv4) => RouteAddress::Inet(ipv4),
+            IpAddr::V6(ipv6) => RouteAddress::Inet6(ipv6),
+        };
+        let header = RouteHeader {
+            address_family: match prefix.afi {
+                AddressFamilyIdentifier::Ipv4 => NetlinkAddressFamily::Inet,
+                AddressFamilyIdentifier::Ipv6 => NetlinkAddressFamily::Inet6,
+            },
+            destination_prefix_length: prefix.prefixlen,
+            table: self.table.unwrap_or(0) as u8,
+            protocol: RouteProtocol::Bgp,
+            kind: RouteType::Unicast,
+            ..Default::default()
+        };
+        let mut rt_msg: RouteMessage = Default::default();
+        rt_msg.header = header;
+        rt_msg.attributes = vec![
+            RouteAttribute::Destination(destination),
+            RouteAttribute::Gateway(nexthop),
+        ];
         rt_handle
             .del(rt_msg)
             .execute()
@@ -165,8 +153,8 @@ impl NetlinkConnector {
         });
         if let Some(table_id) = table {
             req.message_mut()
-                .nlas
-                .push(Nla::Table(table_id.try_into().unwrap()));
+                .attributes
+                .push(RouteAttribute::Table(table_id));
         }
         req.execute().try_collect().await
     }

@@ -1,9 +1,8 @@
 [workspace]
-
 members = [
     "bgpd",
-#   "netlink",
 
     # Tests
-    "tests/integration_tests"
+    "tests/integration_tests",
 ]
+resolver = "2"
