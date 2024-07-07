@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::constants::AddressFamilyIdentifier;
-use crate::server::config::PeerConfig;
-use crate::server::config::ServerConfig;
-use crate::server::peer::PeerCommands;
-use crate::server::peer::PeerStateMachine;
-use crate::server::rib_manager::RibManager;
-use crate::server::rib_manager::RibSnapshot;
-use crate::server::rib_manager::RouteManagerCommands;
-use crate::server::route_server;
-use crate::server::route_server::route_server::route_service_server::RouteServiceServer;
+use crate::config::PeerConfig;
+use crate::config::ServerConfig;
+use crate::peer::PeerCommands;
+use crate::peer::PeerStateMachine;
+use crate::rib_manager::RibManager;
+use crate::rib_manager::RibSnapshot;
+use crate::rib_manager::RouteManagerCommands;
+use crate::route_server;
+use crate::route_server::route_server::route_service_server::RouteServiceServer;
+use bgp_packet::constants::AddressFamilyIdentifier;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;

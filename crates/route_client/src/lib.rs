@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use bgpd::route_client::netlink::NetlinkConnector;
-use bgpd::route_client::southbound_interface::SouthboundInterface;
-use clap::Parser;
+pub mod fib_state;
+pub mod netlink;
+pub mod southbound_interface;
+
 use log::trace;
 use std::convert::TryInto;
 use std::net::IpAddr;
@@ -23,27 +24,28 @@ use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
 use std::time::Duration;
-use tonic::transport::Uri;
 
-use bgpd::bgp_packet::constants::AddressFamilyIdentifier;
-use bgpd::bgp_packet::nlri::NLRI;
-use bgpd::route_client::fib_state::FibState;
+use bgp_packet::constants::AddressFamilyIdentifier;
+use bgp_packet::nlri::NLRI;
 
+use eyre::{anyhow, Result};
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use tonic::transport::Endpoint;
+use tonic::transport::Uri;
 use tracing::{info, warn};
 
-use anyhow::{anyhow, Result};
-
+use crate::fib_state::FibState;
+use crate::netlink::NetlinkConnector;
 use crate::proto::route_service_client::RouteServiceClient;
+use crate::southbound_interface::SouthboundInterface;
 
 pub mod proto {
     tonic::include_proto!("bgpd.grpc");
 }
 
-fn vec_to_array<T, const N: usize>(v: Vec<T>) -> Result<[T; N], anyhow::Error> {
+fn vec_to_array<T, const N: usize>(v: Vec<T>) -> Result<[T; N]> {
     v.try_into()
-        .map_err(|_| anyhow::Error::msg("Wrong size of Vec".to_string()))
+        .map_err(|_| eyre::Error::msg("Wrong size of Vec".to_string()))
 }
 
 /// Temporary hack to select the route to install to the FIB.
@@ -62,12 +64,12 @@ fn select_best_route(ps: &proto::PathSet) -> Option<proto::Path> {
     selected
 }
 
-async fn run_connector_v4<S: SouthboundInterface>(
+pub async fn run_connector_v4<S: SouthboundInterface>(
     route_server: String,
     rt_table: u32,
     dry_run: bool,
     southbound: S,
-) -> Result<(), anyhow::Error> {
+) -> Result<()> {
     // Create netlink socket.
     let mut fib_state = FibState::<Ipv4Addr, S> {
         fib: IpLookupTable::new(),
@@ -132,7 +134,7 @@ async fn run_connector_v4<S: SouthboundInterface>(
     unreachable!()
 }
 
-async fn run_connector_v6<S: SouthboundInterface>(
+pub async fn run_connector_v6<S: SouthboundInterface>(
     route_server: String,
     rt_table: u32,
     dry_run: bool,
@@ -200,73 +202,4 @@ async fn run_connector_v6<S: SouthboundInterface>(
     }
 
     unreachable!()
-}
-
-#[derive(Parser)]
-#[clap(
-    author = "Rayhaan Jaufeerally <rayhaan@rayhaan.ch>",
-    version = "0.1",
-    about = "Installs routes from a BGP speaker via streaming RPC to the forwarding plane"
-)]
-struct Cli {
-    #[clap(long = "route_server")]
-    route_server: String,
-    #[clap(long = "rt_table")]
-    rt_table: Option<u32>,
-    dry_run: bool,
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let args = Cli::parse();
-
-    let _init_log = stderrlog::new()
-        .verbosity(2) // Shows info level.
-        .show_module_names(true)
-        .init();
-    info!("Starting route client");
-
-    let rt_table = match args.rt_table {
-        Some(table) => table,
-        None => 201,
-    };
-
-    let v4_joinhandle = {
-        let server_addr = args.route_server.clone();
-        tokio::task::spawn(async move {
-            run_connector_v4::<NetlinkConnector>(
-                server_addr.clone(),
-                rt_table,
-                args.dry_run,
-                NetlinkConnector::new(Some(rt_table)).await.unwrap(),
-            )
-            .await
-            .unwrap();
-        })
-    };
-
-    let v6_joinhandle = {
-        let server_addr = args.route_server.clone();
-        tokio::task::spawn(async move {
-            run_connector_v6::<NetlinkConnector>(
-                server_addr,
-                rt_table,
-                args.dry_run,
-                NetlinkConnector::new(Some(rt_table)).await.unwrap(),
-            )
-            .await
-            .unwrap();
-        })
-    };
-
-    tokio::select! {
-        _ = v4_joinhandle => {
-            warn!("Unexpected exit of IPv4 connector");
-        },
-        _ = v6_joinhandle => {
-            warn!("Unexpected exit of IPv6 connector");
-        }
-    }
-
-    Ok(())
 }

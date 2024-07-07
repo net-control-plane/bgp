@@ -31,7 +31,7 @@ extern crate clap;
 #[clap(
     author = "Rayhaan Jaufeerally <rayhaan@rayhaan.ch>",
     version = "0.1",
-    about = "A program to install routes from BGP into the Linux control plane"
+    about = "A utility for dumping routes from the bgp_server."
 )]
 struct Cli {
     server_address: String,

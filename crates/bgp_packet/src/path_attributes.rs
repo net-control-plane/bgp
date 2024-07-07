@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::constants::AddressFamilyIdentifier;
-use crate::bgp_packet::constants::SubsequentAddressFamilyIdentifier;
-use crate::bgp_packet::nlri::NLRI;
-use crate::bgp_packet::traits::BGPParserError;
-use crate::bgp_packet::traits::ParserContext;
-use crate::bgp_packet::traits::ReadablePacket;
-use crate::bgp_packet::traits::WritablePacket;
+use crate::constants::AddressFamilyIdentifier;
+use crate::constants::SubsequentAddressFamilyIdentifier;
+use crate::nlri::NLRI;
+use crate::traits::BGPParserError;
+use crate::traits::ParserContext;
+use crate::traits::ReadablePacket;
+use crate::traits::WritablePacket;
 use byteorder::ByteOrder;
 use byteorder::NetworkEndian;
 use nom::number::complete::{be_u16, be_u32, be_u8};
@@ -976,11 +976,11 @@ impl fmt::Display for MPUnreachNLRIPathAttribute {
 mod tests {
     use std::net::Ipv4Addr;
 
-    use crate::bgp_packet::constants::AddressFamilyIdentifier::Ipv6;
-    use crate::bgp_packet::constants::SubsequentAddressFamilyIdentifier::Unicast;
-    use crate::bgp_packet::traits::ParserContext;
-    use crate::bgp_packet::traits::ReadablePacket;
-    use crate::bgp_packet::traits::WritablePacket;
+    use crate::constants::AddressFamilyIdentifier::Ipv6;
+    use crate::constants::SubsequentAddressFamilyIdentifier::Unicast;
+    use crate::traits::ParserContext;
+    use crate::traits::ReadablePacket;
+    use crate::traits::WritablePacket;
 
     use super::ASPathAttribute;
     use super::CommunitiesPathAttribute;

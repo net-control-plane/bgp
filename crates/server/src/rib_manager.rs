@@ -12,27 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::nlri::NLRI;
-use crate::server::data_structures::RouteAnnounce;
-use std::collections::BTreeMap;
-
-use crate::bgp_packet::path_attributes::PathAttribute;
-use crate::server::config::PeerConfig;
-use crate::server::data_structures::RouteUpdate;
-use crate::server::peer::PeerCommands;
-
-use tracing::{info, trace, warn};
+use crate::config::PeerConfig;
+use crate::data_structures::RouteAnnounce;
+use crate::data_structures::RouteUpdate;
+use crate::peer::PeerCommands;
 
 use std::cmp::Eq;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::sync::Mutex;
 
+use bgp_packet::nlri::NLRI;
+use bgp_packet::path_attributes::PathAttribute;
 use ip_network_table_deps_treebitmap::address::Address;
 use serde::Serialize;
-use std::sync::Mutex;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
+use tracing::{info, trace, warn};
 
 use super::data_structures::RouteWithdraw;
 
@@ -227,7 +225,7 @@ where
                 // reannouncement or fresh announcement.
                 match path_set.paths.get_mut(&update.peer) {
                     // Peer already announced this route before.
-                    Some(mut existing) => {
+                    Some(existing) => {
                         trace!(
                             "Updating existing path attributes for NLRI: {}/{}",
                             addr,
@@ -329,12 +327,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::bgp_packet::constants::AddressFamilyIdentifier;
-    use crate::bgp_packet::nlri::NLRI;
-    use crate::server::rib_manager::RibManager;
-    use crate::server::rib_manager::RouteAnnounce;
-    use crate::server::rib_manager::RouteManagerCommands;
-    use crate::server::rib_manager::RouteUpdate;
+    use crate::rib_manager::RibManager;
+    use crate::rib_manager::RouteAnnounce;
+    use crate::rib_manager::RouteManagerCommands;
+    use crate::rib_manager::RouteUpdate;
+
+    use bgp_packet::constants::AddressFamilyIdentifier;
+    use bgp_packet::nlri::NLRI;
 
     use std::net::Ipv6Addr;
     use std::str::FromStr;

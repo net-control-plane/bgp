@@ -1,0 +1,30 @@
+[package]
+edition.workspace      = true
+homepage.workspace     = true
+license.workspace      = true
+name                   = "bgpd_bin"
+repository.workspace   = true
+rust-version.workspace = true
+version.workspace      = true
+
+[dependencies]
+bgp_server.workspace         = true
+clap.workspace               = true
+eyre.workspace               = true
+libc.workspace               = true
+log.workspace                = true
+route_client.workspace       = true
+serde_json.workspace         = true
+signal-hook                  = { version = "0.3.17", features = ["extended-siginfo"] }
+signal-hook-tokio            = "0.3.0"
+tokio.workspace              = true
+tracing-subscriber.workspace = true
+tracing.workspace            = true
+
+[[bin]]
+name = "bgp_server"
+path = "src/bgp_server/main.rs"
+
+[[bin]]
+name = "client"
+path = "src/client/main.rs"

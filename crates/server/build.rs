@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod fib_state;
-pub mod netlink;
-pub mod southbound_interface;
+fn main() {
+    tonic_build::configure()
+        .compile(&["proto/route_service.proto"], &["proto"])
+        .unwrap();
+}
