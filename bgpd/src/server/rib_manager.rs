@@ -21,6 +21,7 @@ use crate::server::config::PeerConfig;
 use crate::server::data_structures::RouteUpdate;
 use crate::server::peer::PeerCommands;
 
+use tokio_util::sync::CancellationToken;
 use tracing::{info, trace, warn};
 
 use std::cmp::Eq;
@@ -116,7 +117,7 @@ pub struct RibManager<A: Address> {
     // Handle for streaming updates to PathSets in the RIB.
     pathset_streaming_handle: broadcast::Sender<(u64, PathSet<A>)>,
 
-    shutdown: broadcast::Receiver<()>,
+    shutdown: CancellationToken,
 }
 
 impl<A: Address> RibManager<A>
@@ -127,7 +128,7 @@ where
 {
     pub fn new(
         chan: mpsc::UnboundedReceiver<RouteManagerCommands<A>>,
-        shutdown: broadcast::Receiver<()>,
+        shutdown: CancellationToken,
     ) -> Result<Self, std::io::Error> {
         // TODO: Make this a flag that can be configured.
         let (pathset_tx, _) = broadcast::channel(10_000_000);
@@ -145,8 +146,8 @@ where
         loop {
             let next = tokio::select! {
                 cmd = self.mgr_rx.recv() => cmd,
-                _ = self.shutdown.recv() => {
-                    warn!("RIB manager shutting down due to shutdown signal.");
+                _ = self.shutdown.cancelled() => {
+                    warn!("RIB manager shutting down.");
                     return Ok(());
                 }
             };
@@ -227,7 +228,7 @@ where
                 // reannouncement or fresh announcement.
                 match path_set.paths.get_mut(&update.peer) {
                     // Peer already announced this route before.
-                    Some(mut existing) => {
+                    Some(existing) => {
                         trace!(
                             "Updating existing path attributes for NLRI: {}/{}",
                             addr,
@@ -339,14 +340,13 @@ mod tests {
     use std::net::Ipv6Addr;
     use std::str::FromStr;
     use tokio::sync::mpsc;
+    use tokio_util::sync::CancellationToken;
 
     #[test]
     fn test_manager_process_single() {
         let (_, rp_rx) = mpsc::unbounded_channel::<RouteManagerCommands<Ipv6Addr>>();
-        // Nothing spaawned here so no need to send the shutdown signal.
-        let (_shutdown_tx, shutdown_rx) = tokio::sync::broadcast::channel(1);
         let mut rib_manager: RibManager<Ipv6Addr> =
-            RibManager::<Ipv6Addr>::new(rp_rx, shutdown_rx).unwrap();
+            RibManager::<Ipv6Addr>::new(rp_rx, CancellationToken::new()).unwrap();
 
         let nexthop = Ipv6Addr::new(0x20, 0x01, 0xd, 0xb8, 0, 0, 0, 0x1);
 

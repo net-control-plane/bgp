@@ -59,7 +59,6 @@ use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp;
 use tokio::net::TcpStream;
-use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -355,7 +354,7 @@ pub struct PeerStateMachine<A: Address> {
     keepalive_timer: Option<(JoinHandle<()>, CancellationToken)>,
     read_cancel_token: Option<CancellationToken>,
 
-    shutdown: broadcast::Receiver<()>,
+    shutdown: CancellationToken,
 }
 
 impl<A: Address> PeerStateMachine<A>
@@ -370,7 +369,7 @@ where
         iface_rx: mpsc::UnboundedReceiver<PeerCommands>,
         iface_tx: mpsc::UnboundedSender<PeerCommands>,
         route_manager: mpsc::UnboundedSender<RouteManagerCommands<A>>,
-        shutdown: broadcast::Receiver<()>,
+        shutdown: CancellationToken,
     ) -> PeerStateMachine<A> {
         let afi = config.afi;
         PeerStateMachine {
@@ -423,7 +422,7 @@ where
         loop {
             let next = tokio::select! {
                 cmd = self.iface_rx.recv() => cmd,
-                _ = self.shutdown.recv() => {
+                _ = self.shutdown.cancelled() => {
                     warn!("PSM shutting down due to shutdown signal.");
                     return;
                 },
@@ -528,7 +527,7 @@ where
             }
 
             PeerCommands::AddLargeCommunity(c, sender) => {
-                for mut a in self.config.announcements.iter_mut() {
+                for a in self.config.announcements.iter_mut() {
                     if let Some(lcs) = a.large_communities.as_mut() {
                         lcs.push(format!("{}:{}:{}", self.config.asn, c.0, c.1));
                     } else {

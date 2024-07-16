@@ -9,7 +9,6 @@ use netlink_packet_route::route::RouteMessage;
 use netlink_packet_route::route::RouteProtocol;
 use netlink_packet_route::route::RouteType;
 use netlink_packet_route::AddressFamily as NetlinkAddressFamily;
-use netlink_packet_utils::nla::Nla;
 use rtnetlink::IpVersion;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::{convert::TryInto, io::ErrorKind};
