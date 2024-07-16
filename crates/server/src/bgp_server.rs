@@ -20,6 +20,7 @@ use crate::rib_manager::RibManager;
 use crate::rib_manager::RibSnapshot;
 use crate::rib_manager::RouteManagerCommands;
 use crate::route_server;
+use crate::route_server::route_server::bgp_server_admin_service_server::BgpServerAdminServiceServer;
 use crate::route_server::route_server::route_service_server::RouteServiceServer;
 use bgp_packet::constants::AddressFamilyIdentifier;
 use std::collections::HashMap;
@@ -212,7 +213,6 @@ async fn start_http_server(
             match rx.await {
                 Ok(resp) => {
                     result += &format!("Peer state: <b>{:?}</b><br/>", resp.state);
-                    result += &format!("<code>{:?}</code>", resp.config);
                 }
                 Err(e) => {
                     warn!("error on rx from peer channel: {}", e);
@@ -461,10 +461,12 @@ impl Server {
                 peer_state_machines: peer_chan_map,
             };
 
-            let svc = RouteServiceServer::new(rs);
+            let rs_svc = RouteServiceServer::new(rs.clone());
+            let adm_svc = BgpServerAdminServiceServer::new(rs);
             tokio::spawn(async move {
                 if let Err(e) = tonic::transport::Server::builder()
-                    .add_service(svc)
+                    .add_service(rs_svc)
+                    .add_service(adm_svc)
                     .serve(addr)
                     .await
                 {

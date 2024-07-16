@@ -106,9 +106,10 @@ pub enum RouteManagerCommands<A> {
 
 pub struct RibManager<A: Address> {
     mgr_rx: mpsc::UnboundedReceiver<RouteManagerCommands<A>>,
+
+    /// Peers configured on this server instance.
     peers: HashMap<String, (PeerConfig, PeerInterface)>,
 
-    // We need to use a mutex for PathSet because IpLookupTable does not return a mut ptr.
     rib: ip_network_table_deps_treebitmap::IpLookupTable<A, Mutex<PathSet<A>>>,
     epoch: u64,
 

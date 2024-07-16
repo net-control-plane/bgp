@@ -48,9 +48,6 @@ pub mod BGPOpenOptionTypeValues {
     pub const CAPABILITIES: BGPOpenOptionType = BGPOpenOptionType(2);
 }
 
-/// OpenOptionValue represents something which can be in the payload of OpenOption.
-trait OpenOptionValue: ReadablePacket + WritablePacket + fmt::Debug {}
-
 #[derive(Debug, PartialEq)]
 pub struct OpenOption {
     pub option_type: BGPOpenOptionType,

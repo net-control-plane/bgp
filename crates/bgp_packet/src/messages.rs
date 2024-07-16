@@ -21,6 +21,7 @@ use crate::traits::BGPParserError;
 use crate::traits::ParserContext;
 use crate::traits::ReadablePacket;
 use crate::traits::WritablePacket;
+
 use byteorder::{ByteOrder, NetworkEndian};
 use bytes::Buf;
 use bytes::BufMut;

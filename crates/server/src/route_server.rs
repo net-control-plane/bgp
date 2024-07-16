@@ -16,6 +16,7 @@ use crate::peer::PeerCommands;
 use crate::rib_manager;
 use crate::rib_manager::RibSnapshot;
 use crate::rib_manager::RouteManagerCommands;
+use crate::route_server::route_server::bgp_server_admin_service_server::BgpServerAdminService;
 use crate::route_server::route_server::route_service_server::RouteService;
 use crate::route_server::route_server::AddressFamily;
 use crate::route_server::route_server::DumpPathsRequest;
@@ -25,7 +26,8 @@ use crate::route_server::route_server::PathSet;
 use crate::route_server::route_server::Prefix;
 use crate::route_server::route_server::StreamPathsRequest;
 use bgp_packet::constants::AddressFamilyIdentifier;
-use log::warn;
+use route_server::PeerStatusRequest;
+use route_server::PeerStatusResponse;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
@@ -36,11 +38,13 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Response;
 use tonic::Status;
+use tracing::warn;
 
 pub mod route_server {
     tonic::include_proto!("bgpd.grpc");
 }
 
+#[derive(Clone)]
 pub struct RouteServer {
     pub ip4_manager: UnboundedSender<RouteManagerCommands<Ipv4Addr>>,
     pub ip6_manager: UnboundedSender<RouteManagerCommands<Ipv6Addr>>,
@@ -95,6 +99,31 @@ impl RouteServer {
             proto_pathset.paths.push(proto_path);
         }
         proto_pathset
+    }
+}
+
+#[tonic::async_trait]
+impl BgpServerAdminService for RouteServer {
+    async fn peer_status(
+        &self,
+        request: tonic::Request<PeerStatusRequest>,
+    ) -> Result<Response<PeerStatusResponse>, Status> {
+        let mut result = PeerStatusResponse::default();
+
+        for peer in &self.peer_state_machines {
+            let (tx, rx) = oneshot::channel();
+            if let Err(e) = peer.1.send(PeerCommands::GetStatus(tx)) {
+                warn!(
+                    peer = peer.0,
+                    "Peer channel dead when trying to send state request"
+                );
+                continue;
+            }
+            let resp = rx.await.map_err(|e| Status::internal(format!("{}", e)))?;
+            result.peer_status.push(resp);
+        }
+
+        Ok(Response::new(result))
     }
 }
 

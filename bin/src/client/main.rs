@@ -1,10 +1,6 @@
 use clap::Parser;
 use eyre::Result;
-use tracing::instrument::WithSubscriber;
-use tracing::log::LevelFilter;
 use tracing::{info, warn};
-use tracing_subscriber::filter;
-use tracing_subscriber::prelude::*;
 
 use route_client::netlink::NetlinkConnector;
 use route_client::{run_connector_v4, run_connector_v6};

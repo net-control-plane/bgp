@@ -18,6 +18,7 @@ use crate::data_structures::RouteAnnounce;
 use crate::data_structures::RouteWithdraw;
 use crate::data_structures::{RouteInfo, RouteUpdate};
 use crate::rib_manager::RouteManagerCommands;
+use crate::route_server::route_server::PeerStatus;
 use bgp_packet::capabilities::{
     BGPCapability, BGPCapabilityTypeValues, BGPCapabilityValue, BGPOpenOptionTypeValues,
     FourByteASNCapability, MultiprotocolCapability, OpenOption, OpenOptionCapabilities,
@@ -44,10 +45,13 @@ use bgp_packet::path_attributes::{
 };
 use bgp_packet::traits::ParserContext;
 use bytes::BytesMut;
+use chrono::{DateTime, NaiveDateTime, Offset, TimeZone, Utc};
+use eyre::{bail, eyre};
 use ip_network_table_deps_treebitmap::address::Address;
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use std::convert::TryFrom;
 use std::convert::TryInto;
+use std::io::ErrorKind;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -72,15 +76,6 @@ type PeerInterface = mpsc::UnboundedSender<PeerCommands>;
 // with updaates on a single thread only. Updating the state should
 // not be expensive, and other tasks such as picking the best route
 // will be done in a different threading model.
-
-/// PeerStatus contians the current state of the PSM for monitoring
-/// and debugging.
-#[derive(Clone, Debug)]
-pub struct PeerStatus {
-    pub name: String,
-    pub config: PeerConfig,
-    pub state: BGPState,
-}
 
 /// BGPState represents which state of the BGP state machine the peer
 /// is currently in.
@@ -175,7 +170,7 @@ async fn run_timer(
 async fn check_hold_timer(
     cancel_token: CancellationToken,
     iface: PeerInterface,
-    last_msg_time: Arc<RwLock<std::time::SystemTime>>,
+    last_msg_time: Arc<RwLock<DateTime<Utc>>>,
     hold_time: std::time::Duration,
 ) {
     loop {
@@ -186,23 +181,16 @@ async fn check_hold_timer(
             }
             _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
                 let last =  last_msg_time.read().unwrap();
-                let elapsed_time = std::time::SystemTime::now().duration_since(*last);
-                match elapsed_time {
-                    Ok(duration) => {
-                        if duration > hold_time {
-                            match iface.send(PeerCommands::TimerEvent(PeerTimerEvent::HoldTimerExpire())) {
-                                Ok(()) => {},
-                                Err(e) => {
-                                    warn!("Failed to send HoldTimerExpire message: {}", e);
-                                }
-                            }
-                            // Exit the hold timer task since it's expired already and is not needed anymore.
-                            return;
+                let elapsed_time = Utc::now() - *last;
+                if elapsed_time.num_seconds() as u64 > hold_time.as_secs() {
+                    match iface.send(PeerCommands::TimerEvent(PeerTimerEvent::HoldTimerExpire())) {
+                        Ok(()) => {},
+                        Err(e) => {
+                            warn!("Failed to send HoldTimerExpire message: {}", e);
                         }
                     }
-                    Err(e) => {
-                        warn!("Failed to check duration since last message: {}", e);
-                    }
+                    // Exit the hold timer task since it's expired already and is not needed anymore.
+                    return;
                 }
             }
 
@@ -342,9 +330,12 @@ pub struct PeerStateMachine<A: Address> {
     /// updates from the peer go to rib_in.
     route_manager: mpsc::UnboundedSender<RouteManagerCommands<A>>,
 
+    // The time at which the session was established.
+    established_time: Option<DateTime<Utc>>,
+
     // Keep track of the time of the last message to efficiently implement
     // the hold timer.
-    last_msg_time: Arc<RwLock<std::time::SystemTime>>,
+    last_msg_time: Arc<RwLock<DateTime<Utc>>>,
 
     // Timers and cancellation token to spawned tasks
     connect_timer: Option<(JoinHandle<()>, CancellationToken)>,
@@ -386,7 +377,8 @@ where
             iface_rx,
             iface_tx,
             route_manager,
-            last_msg_time: Arc::new(RwLock::new(std::time::SystemTime::UNIX_EPOCH)),
+            established_time: None,
+            last_msg_time: Arc::new(RwLock::new(DateTime::from_timestamp(0, 0).unwrap())),
             connect_timer: None,
             hold_timer: None,
             keepalive_timer: None,
@@ -443,7 +435,7 @@ where
         }
     }
 
-    async fn handle_chan_msg(&mut self, c: PeerCommands) -> Result<(), std::io::Error> {
+    async fn handle_chan_msg(&mut self, c: PeerCommands) -> eyre::Result<()> {
         match c {
             PeerCommands::NewConnection(mut conn) => {
                 let peer_addr = conn.peer_addr()?;
@@ -567,16 +559,14 @@ where
 
             PeerCommands::MessageFromPeer(msg) => match self.handle_msg(msg).await {
                 Ok(_) => {
-                    // Update the last time counter
-                    // We call unwrap here because it indicates that some other thread which
-                    // was accessing the lock had a panic.
-                    // TODO: This should be handled more gracefully, maybe by shutting down the
-                    // peer and starting it up again.
-                    let mut last_time_lock = (*self.last_msg_time).write().unwrap();
-                    *last_time_lock = std::time::SystemTime::now();
+                    let mut last_time = self
+                        .last_msg_time
+                        .write()
+                        .map_err(|e| eyre!(e.to_string()))?;
+                    *last_time = Utc::now();
                 }
                 Err(e) => {
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                    bail!(e);
                 }
             },
             PeerCommands::TimerEvent(timer_event) => match timer_event {
@@ -623,9 +613,12 @@ where
             },
             PeerCommands::GetStatus(sender) => {
                 let state = PeerStatus {
-                    name: self.config.name.clone(),
-                    config: self.config.clone(),
-                    state: self.state,
+                    peer_name: self.config.name.clone(),
+                    state: format!("{:?}", self.state),
+                    session_established_time: self.established_time.map(|t| t.timestamp() as u64),
+                    last_messaage_time: Some(self.last_msg_time.read().unwrap().timestamp() as u64),
+                    route_updates_in: Some(0),  /* todo */
+                    route_updates_out: Some(0), /* todo */
                 };
                 match sender.send(state) {
                     Ok(()) => {}
@@ -714,6 +707,7 @@ where
 
         // Set the state machine back to the expected.
         self.state = BGPState::Active;
+        self.established_time = None;
 
         // Restart the connect timer to try and connect periodically.
         {
@@ -952,6 +946,7 @@ where
                         self.config.name, o.asn
                     );
                     self.state = BGPState::Active;
+                    self.established_time = None;
                     if let Some(stream) = self.tcp_stream.as_mut() {
                         stream.shutdown().await.map_err(|e| e.to_string())?;
                     }
@@ -1086,6 +1081,7 @@ where
             BGPSubmessage::KeepaliveMessage(_) => {
                 // Switch the state from OpenConfirm to ESTABLISHED.
                 self.state = BGPState::Established;
+                self.established_time = Some(Utc::now());
 
                 if hold_time > 0 {
                     // Set keepalive timer.

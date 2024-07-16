@@ -32,10 +32,9 @@ use eyre::{anyhow, Result};
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use tonic::transport::Endpoint;
 use tonic::transport::Uri;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::fib_state::FibState;
-use crate::netlink::NetlinkConnector;
 use crate::proto::route_service_client::RouteServiceClient;
 use crate::southbound_interface::SouthboundInterface;
 

@@ -12,11 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use bgp_packet::constants::{AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier};
-use bgp_packet::messages::BGPSubmessage;
-use bgp_packet::traits::ParserContext;
-use bgp_server::bgp_server::Server;
-use bgp_server::config::{PeerConfig, ServerConfig};
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::net::Ipv4Addr;
@@ -26,16 +21,23 @@ use std::net::TcpStream;
 use std::net::{IpAddr, SocketAddrV6};
 use std::os::unix::io::AsRawFd;
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
 use tokio_util::codec::Decoder;
 use tracing::info;
+
+use bgp_packet::constants::{AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier};
+use bgp_packet::messages::BGPSubmessage;
+use bgp_packet::traits::ParserContext;
+use bgp_server::bgp_server::Server;
+use bgp_server::config::{PeerConfig, PrefixAnnouncement, ServerConfig};
+use bgp_server::route_server::route_server::bgp_server_admin_service_client::BgpServerAdminServiceClient;
+use bgp_server::route_server::route_server::PeerStatusRequest;
 
 #[macro_use]
 extern crate serial_test;
 
 fn init() {
     match tracing_subscriber::fmt()
-        .with_env_filter("bgpd=trace,tokio=trace,basic_startup=trace")
+        // .with_env_filter("server=trace,tokio=trace,basic_startup=trace")
         .try_init()
     {
         Ok(()) => {}
@@ -513,7 +515,6 @@ async fn test_bgp_listener_known_peer_inbound_reconnection() {
         }
     }
 
-    // conn.shutdown(std::net::Shutdown::Both).unwrap();
     drop(conn);
 
     // Try to connect to localhost:9179 and it should connect and send the OPEN message.
@@ -555,4 +556,75 @@ async fn test_bgp_listener_known_peer_inbound_reconnection() {
     info!("Reconnection successful");
 
     bgp_server.shutdown().await;
+}
+
+// Spawn two instances of the BGP server and make them peer with each other and exchange a route.
+// We then check that the route is accepted by the receiving peer.
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn test_multi_instance_announce() {
+    init();
+
+    let v6_addr: Ipv6Addr = "::1".parse().unwrap();
+    let config_a = ServerConfig {
+        asn: 65535,
+        hold_time: 3,
+        identifier: Ipv4Addr::new(127, 0, 0, 1),
+        grpc_addr: Some("[::]:9181".to_owned()),
+        http_addr: None,
+        listen_addrs: vec!["[::]:9179".to_owned()],
+        peers: vec![PeerConfig {
+            afi: AddressFamilyIdentifier::Ipv6,
+            safi: SubsequentAddressFamilyIdentifier::Unicast,
+            asn: 65536,
+            ip: IpAddr::V6(v6_addr),
+            port: Some(9180),
+            announcements: vec![PrefixAnnouncement {
+                prefix: "2001:db8:babe::/48".to_owned(),
+                nexthop: "2001:db8::1".parse().unwrap(),
+                local_pref: Some(100),
+                med: Some(100),
+                ..Default::default()
+            }],
+            name: "config-b-peer".to_string(),
+            local_pref: 100,
+        }],
+    };
+
+    let mut config_b = config_a.clone();
+    config_b.asn = 65536;
+    config_b.listen_addrs = vec!["[::]:9180".to_owned()];
+    config_b.grpc_addr = Some("[::]:9182".to_owned());
+    config_b.peers[0].asn = 65535;
+    config_b.peers[0].port = Some(9179);
+    config_b.peers[0].name = "config-a-peer".to_owned();
+
+    let mut server_a = Server::new(config_a);
+    server_a.start(true).await.unwrap();
+
+    let mut server_b = Server::new(config_b);
+    server_b.start(true).await.unwrap();
+
+    // Connect to the grpc endpoint of server_b and check until the peer is healthy.
+    let mut stub = BgpServerAdminServiceClient::connect("http://[::1]:9182")
+        .await
+        .unwrap();
+
+    let mut established = false;
+
+    for _ in 1..10 {
+        let response = stub
+            .peer_status(PeerStatusRequest::default())
+            .await
+            .unwrap()
+            .into_inner();
+        info!(?response);
+
+        if response.peer_status[0].state == "Established" {
+            established = true;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    assert!(established);
 }

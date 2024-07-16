@@ -65,9 +65,26 @@ pub struct PrefixAnnouncement {
     /// Linklocal nexthop to be used for IPv6 announcements.
     pub llnh: Option<Ipv6Addr>,
 
-    // Path attributes
+    /// Path attributes
     pub local_pref: Option<u32>,
+    /// Multi exit discriminator
     pub med: Option<u32>,
+    /// Legacy communities [RFC 1997]
     pub communities: Option<Vec<String>>,
+    /// Large communities [RFC 8092]
     pub large_communities: Option<Vec<String>>,
+}
+
+impl Default for PrefixAnnouncement {
+    fn default() -> Self {
+        Self {
+            prefix: "::/0".to_owned(),
+            nexthop: IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+            llnh: Default::default(),
+            local_pref: Default::default(),
+            med: Default::default(),
+            communities: Default::default(),
+            large_communities: Default::default(),
+        }
+    }
 }
