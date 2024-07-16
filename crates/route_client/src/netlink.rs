@@ -58,7 +58,7 @@ impl SouthboundInterface for NetlinkConnector {
                     .destination_prefix(addr, prefix_len)
                     .gateway(gw_addr);
                 if let Some(table_id) = self.table {
-                    mutation = mutation.table(table_id.try_into().unwrap());
+                    mutation = mutation.table_id(table_id.try_into().unwrap());
                 }
                 mutation.execute().await.map_err(|e| eyre::Error::from(e))
             }
@@ -88,7 +88,7 @@ impl SouthboundInterface for NetlinkConnector {
                     .destination_prefix(addr, prefix_len)
                     .gateway(gw_addr);
                 if let Some(table_id) = self.table {
-                    mutation = mutation.table(table_id.try_into().unwrap());
+                    mutation = mutation.table_id(table_id.try_into().unwrap());
                 }
                 mutation.execute().await.map_err(|e| eyre::Error::from(e))
             }
