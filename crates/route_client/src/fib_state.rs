@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::constants::AddressFamilyIdentifier;
-use crate::bgp_packet::nlri::NLRI;
-use crate::route_client::southbound_interface::SouthboundInterface;
 use futures::lock::Mutex;
 use ip_network_table_deps_treebitmap::address::Address;
 use ip_network_table_deps_treebitmap::IpLookupTable;
@@ -24,6 +21,11 @@ use std::net::Ipv6Addr;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use tracing::{trace, warn};
+
+use bgp_packet::constants::AddressFamilyIdentifier;
+use bgp_packet::nlri::NLRI;
+
+use crate::southbound_interface::SouthboundInterface;
 
 /// fib_state implements the logic to maintain forwarding routes in the FIB.
 /// This for now means the Linux Kernel via Netlink, but in the future can

@@ -14,10 +14,11 @@
 
 use std::{collections::HashMap, net::IpAddr};
 
-use crate::bgp_packet::{constants::AddressFamilyIdentifier, nlri::NLRI};
-use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use eyre::{eyre, Result};
 use log::info;
+
+use bgp_packet::{constants::AddressFamilyIdentifier, nlri::NLRI};
 
 /// SouthboundInterface provides a uniform API to network forwarding elements
 /// These are devices or targets that perform packet routing and are the end
@@ -60,7 +61,7 @@ impl SouthboundInterface for DummyVerifier {
         // Check that the route is not already present.
         match self.route_state.get(&prefix) {
             Some(value) => {
-                return Err(anyhow!(
+                return Err(eyre!(
                     "Prefix {} with nexthop {} already contained in route_state! when trying to add {} -> {}",
                     prefix, value, prefix, nexthop,
                 ));
@@ -80,7 +81,7 @@ impl SouthboundInterface for DummyVerifier {
         match self.route_state.remove(&prefix) {
             Some(entry) => {
                 if entry != nexthop {
-                    return Err(anyhow!(
+                    return Err(eyre!(
                         "Removed entry's nexthop did not match: {} vs requested {}",
                         entry,
                         nexthop
@@ -88,7 +89,7 @@ impl SouthboundInterface for DummyVerifier {
                 }
             }
             None => {
-                return Err(anyhow!(
+                return Err(eyre!(
                     "Requested removal of route {} that was not in route_state",
                     prefix
                 ));

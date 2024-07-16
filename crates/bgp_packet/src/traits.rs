@@ -14,7 +14,7 @@
 
 //! Implements high level abstractions for use in the BGP parser.
 
-use crate::bgp_packet::constants::AddressFamilyIdentifier;
+use crate::constants::AddressFamilyIdentifier;
 use nom::error::ErrorKind;
 use nom::error::ParseError;
 use nom::IResult;

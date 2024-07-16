@@ -12,39 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::capabilities::{
+use crate::config::PrefixAnnouncement;
+use crate::config::{PeerConfig, ServerConfig};
+use crate::data_structures::RouteAnnounce;
+use crate::data_structures::RouteWithdraw;
+use crate::data_structures::{RouteInfo, RouteUpdate};
+use crate::rib_manager::RouteManagerCommands;
+use bgp_packet::capabilities::{
     BGPCapability, BGPCapabilityTypeValues, BGPCapabilityValue, BGPOpenOptionTypeValues,
     FourByteASNCapability, MultiprotocolCapability, OpenOption, OpenOptionCapabilities,
     OpenOptions,
 };
-use crate::bgp_packet::constants::{
-    AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier, AS_TRANS,
-};
-use crate::bgp_packet::messages::BGPMessage;
-use crate::bgp_packet::messages::BGPMessageTypeValues;
-use crate::bgp_packet::messages::BGPMessageTypeValues::OPEN_MESSAGE;
-use crate::bgp_packet::messages::BGPMessageTypeValues::UPDATE_MESSAGE;
-use crate::bgp_packet::messages::BGPSubmessage;
-use crate::bgp_packet::messages::Codec;
-use crate::bgp_packet::messages::KeepaliveMessage;
-use crate::bgp_packet::messages::NotificationMessage;
-use crate::bgp_packet::messages::OpenMessage;
-use crate::bgp_packet::messages::UpdateMessage;
-use crate::bgp_packet::nlri::NLRI;
-use crate::bgp_packet::path_attributes::ASPathAttribute;
-use crate::bgp_packet::path_attributes::NextHopPathAttribute;
-use crate::bgp_packet::path_attributes::OriginPathAttribute;
-use crate::bgp_packet::path_attributes::PathAttribute;
-use crate::bgp_packet::path_attributes::{
+use bgp_packet::constants::{AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier, AS_TRANS};
+use bgp_packet::messages::BGPMessage;
+use bgp_packet::messages::BGPMessageTypeValues;
+use bgp_packet::messages::BGPMessageTypeValues::OPEN_MESSAGE;
+use bgp_packet::messages::BGPMessageTypeValues::UPDATE_MESSAGE;
+use bgp_packet::messages::BGPSubmessage;
+use bgp_packet::messages::Codec;
+use bgp_packet::messages::KeepaliveMessage;
+use bgp_packet::messages::NotificationMessage;
+use bgp_packet::messages::OpenMessage;
+use bgp_packet::messages::UpdateMessage;
+use bgp_packet::nlri::NLRI;
+use bgp_packet::path_attributes::ASPathAttribute;
+use bgp_packet::path_attributes::NextHopPathAttribute;
+use bgp_packet::path_attributes::OriginPathAttribute;
+use bgp_packet::path_attributes::PathAttribute;
+use bgp_packet::path_attributes::{
     LargeCommunitiesPathAttribute, LargeCommunitiesPayload, MPReachNLRIPathAttribute,
 };
-use crate::bgp_packet::traits::ParserContext;
-use crate::server::config::PrefixAnnouncement;
-use crate::server::config::{PeerConfig, ServerConfig};
-use crate::server::data_structures::RouteAnnounce;
-use crate::server::data_structures::RouteWithdraw;
-use crate::server::data_structures::{RouteInfo, RouteUpdate};
-use crate::server::rib_manager::RouteManagerCommands;
+use bgp_packet::traits::ParserContext;
 use bytes::BytesMut;
 use ip_network_table_deps_treebitmap::address::Address;
 use ip_network_table_deps_treebitmap::IpLookupTable;

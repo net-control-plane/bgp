@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::nlri::NLRI;
-use crate::bgp_packet::path_attributes::PathAttribute;
+use bgp_packet::nlri::NLRI;
+use bgp_packet::path_attributes::PathAttribute;
 use std::time::SystemTime;
 
 /// RouteInfo encapsulates information received about a particular BGP route.

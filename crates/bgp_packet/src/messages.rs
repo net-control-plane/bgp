@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::bgp_packet::capabilities::OpenOption;
-use crate::bgp_packet::constants::AddressFamilyIdentifier;
-use crate::bgp_packet::constants::SubsequentAddressFamilyIdentifier;
-use crate::bgp_packet::nlri::NLRI;
-use crate::bgp_packet::path_attributes::PathAttribute;
-use crate::bgp_packet::traits::BGPParserError;
-use crate::bgp_packet::traits::ParserContext;
-use crate::bgp_packet::traits::ReadablePacket;
-use crate::bgp_packet::traits::WritablePacket;
+use crate::capabilities::OpenOption;
+use crate::constants::AddressFamilyIdentifier;
+use crate::constants::SubsequentAddressFamilyIdentifier;
+use crate::nlri::NLRI;
+use crate::path_attributes::PathAttribute;
+use crate::traits::BGPParserError;
+use crate::traits::ParserContext;
+use crate::traits::ReadablePacket;
+use crate::traits::WritablePacket;
 use byteorder::{ByteOrder, NetworkEndian};
 use bytes::Buf;
 use bytes::BufMut;
@@ -545,11 +545,11 @@ impl Display for UpdateMessage {
 mod tests {
     use super::BGPMessage;
     use super::Codec;
-    use crate::bgp_packet::constants::AddressFamilyIdentifier::Ipv6;
-    use crate::bgp_packet::messages::AddressFamilyIdentifier::Ipv4;
-    use crate::bgp_packet::traits::ParserContext;
-    use crate::bgp_packet::traits::ReadablePacket;
-    use crate::bgp_packet::traits::WritablePacket;
+    use crate::constants::AddressFamilyIdentifier::Ipv6;
+    use crate::messages::AddressFamilyIdentifier::Ipv4;
+    use crate::traits::ParserContext;
+    use crate::traits::ReadablePacket;
+    use crate::traits::WritablePacket;
 
     use bytes::BufMut;
     use tokio_util::codec::{Decoder, Encoder};

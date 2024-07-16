@@ -1,6 +1,6 @@
-use crate::bgp_packet::{constants::AddressFamilyIdentifier, nlri::NLRI};
-use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use bgp_packet::{constants::AddressFamilyIdentifier, nlri::NLRI};
+use eyre::{eyre, Result};
 use futures::TryStreamExt;
 use netlink_packet_route::route::RouteAddress;
 use netlink_packet_route::route::RouteAttribute;
@@ -37,7 +37,7 @@ impl SouthboundInterface for NetlinkConnector {
                 let addr: Ipv6Addr = match prefix.try_into()? {
                     IpAddr::V6(addr) => addr,
                     _ => {
-                        return Err(anyhow::Error::from(std::io::Error::new(
+                        return Err(eyre::Error::from(std::io::Error::new(
                             ErrorKind::InvalidInput,
                             "Got non-IPv6 address from NLRI",
                         )))
@@ -46,7 +46,7 @@ impl SouthboundInterface for NetlinkConnector {
                 let gw_addr: Ipv6Addr = match nexthop.clone().try_into()? {
                     IpAddr::V6(addr) => addr,
                     _ => {
-                        return Err(anyhow::Error::from(std::io::Error::new(
+                        return Err(eyre::Error::from(std::io::Error::new(
                             ErrorKind::InvalidInput,
                             "Got non-IPv6 gateway for IPv6 NLRI",
                         )))
@@ -60,14 +60,14 @@ impl SouthboundInterface for NetlinkConnector {
                 if let Some(table_id) = self.table {
                     mutation = mutation.table(table_id.try_into().unwrap());
                 }
-                mutation.execute().await.map_err(|e| anyhow::Error::from(e))
+                mutation.execute().await.map_err(|e| eyre::Error::from(e))
             }
             AddressFamilyIdentifier::Ipv4 => {
                 let prefix_len = prefix.prefixlen;
                 let addr: Ipv4Addr = match prefix.clone().try_into()? {
                     IpAddr::V4(addr) => addr,
                     _ => {
-                        return Err(anyhow::Error::from(std::io::Error::new(
+                        return Err(eyre::Error::from(std::io::Error::new(
                             ErrorKind::InvalidInput,
                             "Got non-IPv4 address from NLRI",
                         )))
@@ -76,7 +76,7 @@ impl SouthboundInterface for NetlinkConnector {
                 let gw_addr = match nexthop.clone().try_into()? {
                     IpAddr::V4(addr) => addr,
                     _ => {
-                        return Err(anyhow::Error::from(std::io::Error::new(
+                        return Err(eyre::Error::from(std::io::Error::new(
                             ErrorKind::InvalidInput,
                             "Got non-IPv4 gateway for IPv4 NLRI",
                         )))
@@ -90,7 +90,7 @@ impl SouthboundInterface for NetlinkConnector {
                 if let Some(table_id) = self.table {
                     mutation = mutation.table(table_id.try_into().unwrap());
                 }
-                mutation.execute().await.map_err(|e| anyhow::Error::from(e))
+                mutation.execute().await.map_err(|e| eyre::Error::from(e))
             }
         }
     }
@@ -99,10 +99,10 @@ impl SouthboundInterface for NetlinkConnector {
         let rt_handle = self.handle.route();
         let destination = match prefix.afi {
             AddressFamilyIdentifier::Ipv4 => {
-                RouteAddress::Inet(prefix.clone().try_into().map_err(|e: String| anyhow!(e))?)
+                RouteAddress::Inet(prefix.clone().try_into().map_err(|e: String| eyre!(e))?)
             }
             AddressFamilyIdentifier::Ipv6 => {
-                RouteAddress::Inet6(prefix.clone().try_into().map_err(|e: String| anyhow!(e))?)
+                RouteAddress::Inet6(prefix.clone().try_into().map_err(|e: String| eyre!(e))?)
             }
         };
         let nexthop = match nexthop {
@@ -130,7 +130,7 @@ impl SouthboundInterface for NetlinkConnector {
             .del(rt_msg)
             .execute()
             .await
-            .map_err(|e| anyhow::Error::from(e))
+            .map_err(|e| eyre::Error::from(e))
     }
 }
 

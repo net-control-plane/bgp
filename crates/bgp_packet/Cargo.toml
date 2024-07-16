@@ -1,0 +1,19 @@
+[package]
+name = "bgp_packet"
+
+edition.workspace      = true
+homepage.workspace     = true
+license.workspace      = true
+repository.workspace   = true
+rust-version.workspace = true
+version.workspace      = true
+
+[lints]
+workspace = true
+
+[dependencies]
+byteorder       = "1.4.3"
+bytes.workspace = true
+nom             = "7.1"
+serde.workspace = true
+tokio-util      = { version = "0.7.10", features = ["codec"] }
