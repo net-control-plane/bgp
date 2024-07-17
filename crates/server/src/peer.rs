@@ -45,13 +45,12 @@ use bgp_packet::path_attributes::{
 };
 use bgp_packet::traits::ParserContext;
 use bytes::BytesMut;
-use chrono::{DateTime, NaiveDateTime, Offset, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use eyre::{bail, eyre};
 use ip_network_table_deps_treebitmap::address::Address;
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use std::convert::TryFrom;
 use std::convert::TryInto;
-use std::io::ErrorKind;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -297,10 +296,12 @@ pub struct PeerStateMachine<A: Address> {
     // server_config is the server wide config that we use here for
     // reading global options.
     server_config: ServerConfig,
+
     /// The current configuration for this peer.
     // To apply a new configuration the peer must be shutdown and
     // restarted so that the new configuration can take effect.
     config: PeerConfig,
+
     // Store the peer's open message so we can reference it.
     peer_open_msg: Option<OpenMessage>,
 
@@ -813,7 +814,7 @@ where
                     // Update the route_info, we need to clone it then reassign.
                     let mut new_route_info: RouteInfo<A> = route_info.clone();
                     new_route_info.path_attributes = route_update.path_attributes.clone();
-                    new_route_info.updated = std::time::SystemTime::now();
+                    new_route_info.updated = Utc::now();
                     self.prefixes_in
                         .insert(addr, announcement.prefixlen.into(), new_route_info);
                 }
@@ -825,8 +826,8 @@ where
                         nlri: announcement.clone(),
                         accepted,
                         rejection_reason,
-                        learned: std::time::SystemTime::now(),
-                        updated: std::time::SystemTime::now(),
+                        learned: Utc::now(),
+                        updated: Utc::now(),
                         path_attributes: route_update.path_attributes.clone(),
                     };
                     self.prefixes_in

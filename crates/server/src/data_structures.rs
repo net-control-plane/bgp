@@ -14,7 +14,8 @@
 
 use bgp_packet::nlri::NLRI;
 use bgp_packet::path_attributes::PathAttribute;
-use std::time::SystemTime;
+
+use chrono::{DateTime, Utc};
 
 /// RouteInfo encapsulates information received about a particular BGP route.
 #[derive(Clone, Debug)]
@@ -30,9 +31,9 @@ pub struct RouteInfo<A> {
     pub rejection_reason: Option<String>,
 
     /// Time at which this path was learned from the peer.
-    pub learned: SystemTime,
+    pub learned: DateTime<Utc>,
     /// Time at which this path was last updated by the peer.
-    pub updated: SystemTime,
+    pub updated: DateTime<Utc>,
 
     /// The current path attributes from the UPDATE message where this path
     /// was learned.
