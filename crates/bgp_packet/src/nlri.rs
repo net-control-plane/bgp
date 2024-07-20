@@ -17,11 +17,13 @@ use crate::traits::BGPParserError;
 use crate::traits::ParserContext;
 use crate::traits::ReadablePacket;
 use crate::traits::WritablePacket;
+
 use nom::bytes::complete::take;
 use nom::number::complete::be_u8;
 use nom::Err::Failure;
 use nom::IResult;
-use serde::Serialize;
+use serde::de;
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
@@ -31,7 +33,7 @@ use std::str::FromStr;
 
 // NLRI here is the Neighbor Link Reachability Information from RFC 4271.
 // Other NLRIs such as MP Reach NLRI are implemented as path attributes.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct NLRI {
     pub afi: AddressFamilyIdentifier,
     pub prefixlen: u8,
@@ -84,6 +86,37 @@ impl ReadablePacket for NLRI {
                 },
             )),
         }
+    }
+}
+
+impl WritablePacket for NLRI {
+    fn to_wire(&self, _: &ParserContext) -> Result<Vec<u8>, &'static str> {
+        let mut buf: Vec<u8> = Vec::new();
+        buf.push(self.prefixlen);
+        buf.extend(self.prefix.as_slice());
+        Ok(buf)
+    }
+    fn wire_len(&self, _: &ParserContext) -> Result<u16, &'static str> {
+        Ok(1 + self.prefix.len() as u16)
+    }
+}
+
+impl Serialize for NLRI {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for NLRI {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Self::try_from(String::deserialize(deserializer)?.as_str())
+            .map_err(|e| de::Error::custom(e))
     }
 }
 
@@ -165,9 +198,9 @@ impl TryInto<IpAddr> for NLRI {
     }
 }
 
-impl TryFrom<String> for NLRI {
+impl TryFrom<&str> for NLRI {
     type Error = String;
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         let parts: Vec<&str> = value.split("/").collect();
         if parts.len() != 2 {
             return Err(format!("Expected ip_addr/prefixlen but got: {}", value));
@@ -208,18 +241,6 @@ impl TryFrom<String> for NLRI {
             prefixlen,
             prefix: octets,
         })
-    }
-}
-
-impl WritablePacket for NLRI {
-    fn to_wire(&self, _: &ParserContext) -> Result<Vec<u8>, &'static str> {
-        let mut buf: Vec<u8> = Vec::new();
-        buf.push(self.prefixlen);
-        buf.extend(self.prefix.as_slice());
-        Ok(buf)
-    }
-    fn wire_len(&self, _: &ParserContext) -> Result<u16, &'static str> {
-        Ok(1 + self.prefix.len() as u16)
     }
 }
 
@@ -322,7 +343,7 @@ mod tests {
         ];
 
         for (i, case) in cases.iter().enumerate() {
-            let parsed_nlri = NLRI::try_from(case.0.clone()).unwrap();
+            let parsed_nlri = NLRI::try_from(case.0.as_str()).unwrap();
             assert_eq!(parsed_nlri.prefix, case.1, "Check prefix match ({})", i);
             assert_eq!(
                 parsed_nlri.prefixlen, case.2,
@@ -335,6 +356,13 @@ mod tests {
                 "Check std::fmt::Display match ({})",
                 i
             );
+
+            // Check that roundtripping via JSON serialize / deserialize is correct.
+            let json_encoded = serde_json::to_string(&parsed_nlri).unwrap();
+            assert_eq!(json_encoded[1..json_encoded.len() - 1], case.3);
+
+            let reparsed: NLRI = serde_json::from_str(&json_encoded).unwrap();
+            assert_eq!(reparsed, parsed_nlri);
         }
     }
 

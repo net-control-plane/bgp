@@ -125,6 +125,8 @@ async fn test_bgp_listener_known_peer() {
             name: "local-test-peer".to_string(),
             local_pref: 100,
             port: None,
+            filter_in: Vec::default(),
+            filter_out: Vec::default(),
         }],
     };
 
@@ -215,6 +217,8 @@ async fn test_bgp_peer_statemachine_outbound_conn() {
             announcements: vec![],
             name: "local-test-peer".to_string(),
             local_pref: 100,
+            filter_in: Vec::default(),
+            filter_out: Vec::default(),
         }],
     };
 
@@ -303,6 +307,8 @@ async fn test_bgp_peer_statemachine_outbound_reconnection() {
             announcements: vec![],
             name: "local-test-peer".to_string(),
             local_pref: 100,
+            filter_in: Vec::default(),
+            filter_out: Vec::default(),
         }],
     };
 
@@ -437,6 +443,8 @@ async fn test_bgp_listener_known_peer_inbound_reconnection() {
             name: "local-test-peer".to_string(),
             local_pref: 100,
             port: None,
+            filter_in: Vec::default(),
+            filter_out: Vec::default(),
         }],
     };
 
@@ -588,6 +596,8 @@ async fn test_multi_instance_announce() {
             }],
             name: "config-b-peer".to_string(),
             local_pref: 100,
+            filter_in: Vec::default(),
+            filter_out: Vec::default(),
         }],
     };
 

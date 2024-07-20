@@ -15,6 +15,7 @@
 pub mod bgp_server;
 pub mod config;
 pub mod data_structures;
+pub mod filter_eval;
 pub mod peer;
 pub mod rib_manager;
 pub mod route_server;

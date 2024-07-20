@@ -17,6 +17,7 @@ use crate::config::{PeerConfig, ServerConfig};
 use crate::data_structures::RouteAnnounce;
 use crate::data_structures::RouteWithdraw;
 use crate::data_structures::{RouteInfo, RouteUpdate};
+use crate::filter_eval::FilterEvaluator;
 use crate::rib_manager::RouteManagerCommands;
 use crate::route_server::route_server::PeerStatus;
 use bgp_packet::capabilities::{
@@ -302,6 +303,10 @@ pub struct PeerStateMachine<A: Address> {
     // restarted so that the new configuration can take effect.
     config: PeerConfig,
 
+    /// FilterEvaluator checks whether a given NLRI should be accepted or not
+    /// based on the installed filters.
+    filter_evaluator: FilterEvaluator,
+
     // Store the peer's open message so we can reference it.
     peer_open_msg: Option<OpenMessage>,
 
@@ -364,7 +369,8 @@ where
         let afi = config.afi;
         PeerStateMachine {
             server_config,
-            config,
+            config: config.clone(),
+            filter_evaluator: FilterEvaluator::new(config.filter_in, config.filter_out),
             peer_open_msg: None,
             state: BGPState::Active,
             tcp_stream: None,
@@ -766,6 +772,7 @@ where
         announcements: Vec<NLRI>,
         path_attributes: Vec<PathAttribute>,
     ) -> Result<(), String> {
+        // Extract the as_path and med from the attributes.
         let mut as_path: Vec<u32> = vec![];
         let mut med: u32 = 0;
         for attr in &path_attributes {
@@ -797,7 +804,11 @@ where
         for announcement in announcements {
             let addr: A = announcement.clone().try_into().map_err(|e| e.to_string())?;
             // Should we accept this prefix?
-            let accepted: bool = self.decide_accept_prefix(addr, announcement.prefixlen);
+            let accepted = self.filter_evaluator.evaluate_in(
+                &mut route_update.path_attributes,
+                &route_update.as_path,
+                &announcement,
+            );
             let rejection_reason: Option<String> = match accepted {
                 true => Some("Filtered by policy".to_owned()),
                 false => None,
@@ -849,11 +860,6 @@ where
         }
 
         Ok(())
-    }
-
-    fn decide_accept_prefix(&mut self, _: A, _: u8) -> bool {
-        // TODO: Implement filtering of prefixes.
-        true
     }
 
     fn decide_accept_message(&mut self, _: &[PathAttribute]) -> bool {
@@ -1185,7 +1191,7 @@ where
                     _ => return Err("Found non IPv4 nexthop in announcement".to_string()),
                 }
 
-                let nlri = NLRI::try_from(announcement.prefix.clone())?;
+                let nlri = NLRI::try_from(announcement.prefix.as_str())?;
                 bgp_update_msg.announced_nlri.push(nlri);
             }
             AddressFamilyIdentifier::Ipv6 => {
@@ -1195,7 +1201,7 @@ where
                         return Err("Found non IPv6 nexthop in announcement".to_string());
                     }
                 };
-                let nlri = NLRI::try_from(announcement.prefix.clone())?;
+                let nlri = NLRI::try_from(announcement.prefix.as_str())?;
                 let mp_reach = MPReachNLRIPathAttribute {
                     afi: AddressFamilyIdentifier::Ipv6,
                     safi: SubsequentAddressFamilyIdentifier::Unicast,
@@ -1272,7 +1278,7 @@ where
                         PathAttribute::MPReachNLRIPathAttribute(nlri) => {
                             // TODO: Determine which AFI/SAFI this update corresponds to.
                             let nexthop_res = nlri.clone().nexthop_to_v6();
-                            // TODO: How do we pick whether to use the global or LLNH?
+
                             if let Some((global, _llnh_opt)) = nexthop_res {
                                 self.process_announcements(
                                     global.octets().to_vec(),
@@ -1326,6 +1332,7 @@ where
                 );
                 Ok(())
             }
+
             BGPSubmessage::KeepaliveMessage(_) => Ok(()),
             _ => Err(format!("Got unexpected message from peer: {:?}", msg)),
         }

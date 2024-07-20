@@ -24,6 +24,7 @@ use byteorder::NetworkEndian;
 use nom::number::complete::{be_u16, be_u32, be_u8};
 use nom::Err::Failure;
 use nom::IResult;
+use serde::Deserialize;
 use serde::Serialize;
 use std::convert::TryInto;
 use std::fmt;
@@ -739,7 +740,7 @@ pub struct LargeCommunitiesPathAttribute {
     pub values: Vec<LargeCommunitiesPayload>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct LargeCommunitiesPayload {
     pub global_admin: u32,
     pub ld1: u32,

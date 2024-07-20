@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use bgp_packet::constants::{AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier};
+use bgp_packet::{
+    constants::{AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier},
+    nlri::NLRI,
+    path_attributes::{LargeCommunitiesPathAttribute, LargeCommunitiesPayload},
+};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -55,6 +59,34 @@ pub struct PeerConfig {
     // Announcements is a hardcoded list of BGP updates to send
     // to the peer.
     pub announcements: Vec<PrefixAnnouncement>,
+
+    /// filter_in is applied to every announcement received by the peer before being accepted into Loc-RIB.
+    pub filter_in: Vec<(FilterMatcher, FilterAction)>,
+
+    /// filter_out is applied to every entry from Loc-RIB and if evaluation passes, will be sent to Adj-RIBs-Out
+    pub filter_out: Vec<(FilterMatcher, FilterAction)>,
+}
+
+/// All the fields in a FilterMatcher must be matched if present for the action to be executed.
+// Implementation note, it's probably more efficient to JIT compile the filter into machine code
+// so only the relevant fields need to be checked.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilterMatcher {
+    pub nlri: Option<NLRI>,
+    pub origin_asn: Option<u32>,
+    pub large_community: Option<LargeCommunitiesPayload>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum FilterAction {
+    Accept,
+    Reject,
+    Update(UpdateAction),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum UpdateAction {
+    AttachLargeCommunity(LargeCommunitiesPayload),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
