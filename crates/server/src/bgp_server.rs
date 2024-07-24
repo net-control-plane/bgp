@@ -122,49 +122,6 @@ async fn start_http_server(
         }
     }
 
-    // async fn rm_large_community(
-    //     chan: UnboundedSender<PeerCommands>,
-    //     ld1: u32,
-    //     ld2: u32,
-    // ) -> Result<impl warp::Reply, warp::Rejection> {
-    //     let (tx, rx) = tokio::sync::oneshot::channel::<String>();
-    //     if let Err(e) = chan.send(PeerCommands::RemoveLargeCommunity((ld1, ld2), tx)) {
-    //         warn!("Failed to send RemoveLargeCommunity request: {}", e);
-    //         return Err(warp::reject());
-    //     }
-
-    //     match rx.await {
-    //         Ok(result) => Ok(warp::reply::json(&result)),
-    //         Err(e) => {
-    //             warn!(
-    //                 "RemoveLargeCommunity response from peer state machine: {}",
-    //                 e
-    //             );
-    //             Err(warp::reject())
-    //         }
-    //     }
-    // }
-
-    // async fn add_large_community(
-    //     chan: UnboundedSender<PeerCommands>,
-    //     ld1: u32,
-    //     ld2: u32,
-    // ) -> Result<impl warp::Reply, warp::Rejection> {
-    //     let (tx, rx) = tokio::sync::oneshot::channel::<String>();
-    //     if let Err(e) = chan.send(PeerCommands::AddLargeCommunity((ld1, ld2), tx)) {
-    //         warn!("Failed to send AddLargeCommunity request: {}", e);
-    //         return Err(warp::reject());
-    //     }
-
-    //     match rx.await {
-    //         Ok(result) => Ok(warp::reply::json(&result)),
-    //         Err(e) => {
-    //             warn!("AddLargeCommunity response from peer state machine: {}", e);
-    //             Err(warp::reject())
-    //         }
-    //     }
-    // }
-
     // reset_peer_connection causes the PSM to close the connection, flush state, and reconnect to the peer.
     async fn reset_peer_connection(
         peer_name: String,
