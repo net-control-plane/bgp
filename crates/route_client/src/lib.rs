@@ -120,9 +120,9 @@ pub async fn run_connector_v4<S: SouthboundInterface>(
             let nexthop_bytes: [u8; 4] = path.nexthop.clone().try_into().unwrap();
             let nexthop: Ipv4Addr = nexthop_bytes.into();
             trace!(
-                "nexthop: {}, peer: {}, local_pref: {}, med: {}, as_path: {:?}",
+                "nexthop: {}, peer_id: {:x?}, local_pref: {}, med: {}, as_path: {:?}",
                 nexthop,
-                path.peer_name,
+                path.peer_id,
                 path.local_pref,
                 path.med,
                 path.as_path
@@ -190,9 +190,9 @@ pub async fn run_connector_v6<S: SouthboundInterface>(
             let nexthop_bytes: [u8; 16] = path.nexthop.clone().try_into().unwrap();
             let nexthop: Ipv6Addr = nexthop_bytes.into();
             trace!(
-                "nexthop: {}, peer: {}, local_pref: {}, med: {}, as_path: {:?}",
+                "nexthop: {}, peer_id: {:x?}, local_pref: {}, med: {}, as_path: {:?}",
                 nexthop,
-                path.peer_name,
+                path.peer_id,
                 path.local_pref,
                 path.med,
                 path.as_path

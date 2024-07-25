@@ -14,11 +14,10 @@
 
 use crate::config::PrefixAnnouncement;
 use crate::config::{PeerConfig, ServerConfig};
-use crate::data_structures::RouteAnnounce;
 use crate::data_structures::RouteWithdraw;
 use crate::data_structures::{RouteInfo, RouteUpdate};
 use crate::filter_eval::FilterEvaluator;
-use crate::rib_manager::RouteManagerCommands;
+use crate::rib_manager::{PathData, PathSource, RouteManagerCommands};
 use crate::route_server::route_server::PeerStatus;
 use bgp_packet::capabilities::{
     BGPCapability, BGPCapabilityTypeValues, BGPCapabilityValue, BGPOpenOptionTypeValues,
@@ -576,6 +575,10 @@ where
             PeerCommands::GetStatus(sender) => {
                 let state = PeerStatus {
                     peer_name: self.config.name.clone(),
+                    peer_id: match &self.peer_open_msg {
+                        Some(peer_open_msg) => peer_open_msg.identifier.octets().to_vec(),
+                        None => vec![],
+                    },
                     state: format!("{:?}", self.state),
                     session_established_time: self.established_time.map(|t| t.timestamp() as u64),
                     last_messaage_time: Some(self.last_msg_time.read().unwrap().timestamp() as u64),
@@ -619,7 +622,7 @@ where
     // It deallocates the resources in this peer, unsets the TCP connection, removes the
     // routes from the inner structure as well as the routes that were propagated into the
     // RIB.
-    async fn connection_closed(&mut self) -> Result<(), std::io::Error> {
+    async fn connection_closed(&mut self) -> eyre::Result<()> {
         info!("Connection closed on peer {}", self.config.name);
 
         // Cancel keepalive timer.
@@ -647,10 +650,15 @@ where
             }
         }
 
+        let peer_id = match &self.peer_open_msg {
+            Some(peer_open_msg) => peer_open_msg.identifier,
+            None => bail!("Missing peer open msg"),
+        };
+
         // Iterate over every route that we've announced to the route manager
         // and withdraw it.
         let mut route_withdraw = RouteWithdraw {
-            peer: self.config.name.clone(),
+            peer_id,
             prefixes: vec![],
         };
 
@@ -694,13 +702,18 @@ where
 
     /// process_withdrawals creates a RouteUpdate from withdrawal announcments and sends
     /// them to the rib_in channel to be consumed by the route processor.
-    fn process_withdrawals(&mut self, withdrawals: Vec<NLRI>) -> Result<(), String> {
+    fn process_withdrawals(&mut self, withdrawals: Vec<NLRI>) -> eyre::Result<()> {
+        let peer_id = match &self.peer_open_msg {
+            Some(peer_open_msg) => peer_open_msg.identifier,
+            None => bail!("Missing peer open msg"),
+        };
+
         let mut route_withdraw = RouteWithdraw {
-            peer: self.config.name.clone(),
+            peer_id,
             prefixes: vec![],
         };
         for nlri in withdrawals {
-            let addr: A = nlri.clone().try_into().map_err(|e| e.to_string())?;
+            let addr: A = nlri.clone().try_into().map_err(|e| eyre!(e.to_string()))?;
 
             // remove from prefixes if present.
             self.prefixes_in.remove(addr, nlri.prefixlen.into());
@@ -713,7 +726,7 @@ where
                 .send(RouteManagerCommands::Update(RouteUpdate::Withdraw(
                     route_withdraw,
                 )))
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| eyre!(e.to_string()))?;
         }
 
         Ok(())
@@ -726,7 +739,7 @@ where
         nexthop: Vec<u8>,
         announcements: Vec<NLRI>,
         path_attributes: Vec<PathAttribute>,
-    ) -> Result<(), String> {
+    ) -> eyre::Result<()> {
         // Extract the as_path and med from the attributes.
         let mut as_path: Vec<u32> = vec![];
         let mut med: u32 = 0;
@@ -746,22 +759,33 @@ where
             }
         }
 
-        let mut route_update = RouteAnnounce {
-            local_pref: self.config.local_pref,
-            med,
-            nexthop,
-            as_path,
-            path_attributes,
-            peer: self.config.name.clone(),
-            prefixes: vec![],
+        let peer_id = match &self.peer_open_msg {
+            Some(peer_open_msg) => peer_open_msg.identifier,
+            None => bail!("missing peer open msg"),
         };
 
+        let mut path_data = PathData {
+            origin: OriginPathAttribute::EGP,
+            nexthop,
+            path_source: PathSource::BGPPeer(peer_id),
+            local_pref: self.config.local_pref,
+            med,
+            as_path,
+            path_attributes,
+            learn_time: Utc::now(),
+        };
+
+        let mut accepted_nlris = vec![];
+
         for announcement in announcements {
-            let addr: A = announcement.clone().try_into().map_err(|e| e.to_string())?;
+            let addr: A = announcement
+                .clone()
+                .try_into()
+                .map_err(|e| eyre!(e.to_string()))?;
             // Should we accept this prefix?
             let accepted = self.filter_evaluator.evaluate_in(
-                &mut route_update.path_attributes,
-                &route_update.as_path,
+                &mut path_data.path_attributes,
+                &path_data.as_path,
                 &announcement,
             );
             let rejection_reason: Option<String> = match accepted {
@@ -779,22 +803,23 @@ where
                 Some(route_info) => {
                     // Update the route_info, we need to clone it then reassign.
                     let mut new_route_info: RouteInfo<A> = route_info.clone();
-                    new_route_info.path_attributes = route_update.path_attributes.clone();
+                    new_route_info.path_attributes = path_data.path_attributes.clone();
                     new_route_info.updated = Utc::now();
                     self.prefixes_in
                         .insert(addr, announcement.prefixlen.into(), new_route_info);
                 }
                 None => {
                     // Insert new RouteInfo
+                    // TODO: Maybe RouteInfo should be replaced with PathData after adding an accepted/rejected to it.
                     let route_info = RouteInfo::<A> {
                         prefix: addr,
                         prefixlen: announcement.prefixlen,
                         nlri: announcement.clone(),
                         accepted,
                         rejection_reason,
-                        learned: Utc::now(),
-                        updated: Utc::now(),
-                        path_attributes: route_update.path_attributes.clone(),
+                        learned: path_data.learn_time,
+                        updated: path_data.learn_time,
+                        path_attributes: path_data.path_attributes.clone(),
                     };
                     self.prefixes_in
                         .insert(addr, announcement.prefixlen.into(), route_info);
@@ -802,16 +827,17 @@ where
             }
 
             if accepted {
-                route_update.prefixes.push(announcement);
+                accepted_nlris.push(announcement);
             }
         }
 
-        if !route_update.prefixes.is_empty() {
+        if !accepted_nlris.is_empty() {
             self.route_manager
-                .send(RouteManagerCommands::Update(RouteUpdate::Announce(
-                    route_update,
-                )))
-                .map_err(|e| e.to_string())?;
+                .send(RouteManagerCommands::Update(RouteUpdate::Announce((
+                    accepted_nlris,
+                    Arc::new(path_data),
+                ))))
+                .map_err(|e| eyre!(e.to_string()))?;
         }
 
         Ok(())
@@ -861,7 +887,7 @@ where
     }
 
     /// handle_msg processes incoming messages and updates the state in PeerStateMachine.
-    async fn handle_msg(&mut self, msg: BGPSubmessage) -> Result<(), String> {
+    async fn handle_msg(&mut self, msg: BGPSubmessage) -> eyre::Result<()> {
         match &self.state {
             BGPState::Idle => self.handle_idle_msg().await,
             BGPState::Active => self.handle_active_msg(msg).await,
@@ -872,32 +898,26 @@ where
         }
     }
 
-    async fn handle_idle_msg(&mut self) -> Result<(), String> {
-        Err("Peer cannot process messages when in the Idle state".to_string())
+    async fn handle_idle_msg(&mut self) -> eyre::Result<()> {
+        bail!("Peer cannot process messages when in the Idle state")
     }
 
-    async fn handle_active_msg(&mut self, msg: BGPSubmessage) -> Result<(), String> {
+    async fn handle_active_msg(&mut self, msg: BGPSubmessage) -> eyre::Result<()> {
         // In the active state a new connection should come in via the NewConnection
         // message on the PSM channel, or if we establish a connection out, then that
         // logic should handle the messages until OpenSent.
-        return Err(format!(
-            "Discarding message received in ACTIVE state: {:?}",
-            msg
-        ));
+        bail!("Discarding message received in ACTIVE state: {:?}", msg)
     }
 
-    async fn handle_connect_msg(&mut self, msg: BGPSubmessage) -> Result<(), String> {
+    async fn handle_connect_msg(&mut self, msg: BGPSubmessage) -> eyre::Result<()> {
         // In the connect state a new connection should come in via the NewConnection
         // message on the PSM channel, or if we establish a connection out, then that
         // logic should handle the messages until OpenSent.
-        return Err(format!(
-            "Discarding message received in CONNECT state: {:?}",
-            msg
-        ));
+        bail!("Discarding message received in CONNECT state: {:?}", msg)
     }
 
     // In the opensent state we still need to get the OPEN message from the peer
-    async fn handle_opensent_msg(&mut self, msg: BGPSubmessage) -> Result<(), String> {
+    async fn handle_opensent_msg(&mut self, msg: BGPSubmessage) -> eyre::Result<()> {
         info!("Handling message in OpenSent state: {:?}", msg);
         match msg {
             BGPSubmessage::OpenMessage(o) => {
@@ -910,7 +930,7 @@ where
                     self.state = BGPState::Active;
                     self.established_time = None;
                     if let Some(stream) = self.tcp_stream.as_mut() {
-                        stream.shutdown().await.map_err(|e| e.to_string())?;
+                        stream.shutdown().await.map_err(|e| eyre!(e.to_string()))?;
                     }
                 }
 
@@ -932,7 +952,7 @@ where
                     error_code: u8,
                     error_subcode: u8,
                     iface_tx: &mut mpsc::UnboundedSender<PeerCommands>,
-                ) -> Result<(), String> {
+                ) -> eyre::Result<()> {
                     let notification = NotificationMessage {
                         error_code,
                         error_subcode,
@@ -940,10 +960,10 @@ where
                     };
                     iface_tx
                         .send(PeerCommands::SendNotification(notification))
-                        .map_err(|e| e.to_string())?;
+                        .map_err(|e| eyre!(e.to_string()))?;
                     iface_tx
                         .send(PeerCommands::ConnectionClosed())
-                        .map_err(|e| e.to_string())?;
+                        .map_err(|e| eyre!(e.to_string()))?;
                     Ok(())
                 }
 
@@ -1016,27 +1036,26 @@ where
                 self.peer_open_msg = Some(o);
 
                 // Send the Keepalive message and transition to OpenConfirm.
-                self.send_keepalive().await.map_err(|e| e.to_string())?;
+                self.send_keepalive()
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
                 self.state = BGPState::OpenConfirm;
 
                 Ok(())
             }
-            _ => Err("Got non-open message in state opensent".to_string()),
+            _ => bail!("Got non-open message in state opensent"),
         }
     }
 
     // In the openconfirm state we are waiting for a KEEPALIVE from the peer.
-    async fn handle_openconfirm_msg(&mut self, msg: BGPSubmessage) -> Result<(), String> {
+    async fn handle_openconfirm_msg(&mut self, msg: BGPSubmessage) -> eyre::Result<()> {
         // In the openconfirm state we wait for a keepalive message from the peer.
         // We also compute the timer expiry time for the keepalive timer.
         // Hold time of 0 means no keepalive and hold timer.
         let hold_time = match &self.peer_open_msg {
             Some(o) => o.hold_time,
             None => {
-                return Err(
-                    "Logic error: reached handle_openconfirm without a open message set"
-                        .to_string(),
-                );
+                bail!("Logic error: reached handle_openconfirm without a open message set");
             }
         };
         match msg {
@@ -1097,14 +1116,14 @@ where
 
                 Ok(())
             }
-            _ => Err(format!(
+            _ => bail!(
                 "Got unsupported message type in handle_openconfirm_msg: {:?}",
                 msg
-            )),
+            ),
         }
     }
 
-    async fn hold_timer_expired(&mut self) -> Result<(), std::io::Error> {
+    async fn hold_timer_expired(&mut self) -> eyre::Result<()> {
         let notification = NotificationMessage {
             error_code: 4,
             error_subcode: 0,
@@ -1117,7 +1136,7 @@ where
         Ok(())
     }
 
-    async fn announce_static(&mut self, announcement: &PrefixAnnouncement) -> Result<(), String> {
+    async fn announce_static(&mut self, announcement: &PrefixAnnouncement) -> eyre::Result<()> {
         let mut bgp_update_msg = UpdateMessage {
             withdrawn_nlri: vec![],
             announced_nlri: vec![],
@@ -1127,7 +1146,7 @@ where
         // Origin, TODO: configure this based on i/eBGP
         bgp_update_msg
             .path_attributes
-            .push(PathAttribute::OriginPathAttribute(OriginPathAttribute(1)));
+            .push(PathAttribute::OriginPathAttribute(OriginPathAttribute::EGP));
 
         bgp_update_msg
             .path_attributes
@@ -1143,20 +1162,22 @@ where
                                 nh,
                             )))
                     }
-                    _ => return Err("Found non IPv4 nexthop in announcement".to_string()),
+                    _ => bail!("Found non IPv4 nexthop in announcement"),
                 }
 
-                let nlri = NLRI::try_from(announcement.prefix.as_str())?;
+                let nlri = NLRI::try_from(announcement.prefix.as_str())
+                    .map_err(|e| eyre!(e.to_string()))?;
                 bgp_update_msg.announced_nlri.push(nlri);
             }
             AddressFamilyIdentifier::Ipv6 => {
                 let nexthop_octets = match announcement.nexthop {
                     IpAddr::V6(nh) => nh.octets().to_vec(),
                     _ => {
-                        return Err("Found non IPv6 nexthop in announcement".to_string());
+                        bail!("Found non IPv6 nexthop in announcement");
                     }
                 };
-                let nlri = NLRI::try_from(announcement.prefix.as_str())?;
+                let nlri = NLRI::try_from(announcement.prefix.as_str())
+                    .map_err(|e| eyre!(e.to_string()))?;
                 let mp_reach = MPReachNLRIPathAttribute {
                     afi: AddressFamilyIdentifier::Ipv6,
                     safi: SubsequentAddressFamilyIdentifier::Unicast,
@@ -1205,19 +1226,19 @@ where
             .lock()
             .await
             .encode(bgp_message, &mut buf)
-            .map_err(|e| format!("failed to encode BGP message: {}", e))?;
+            .map_err(|e| eyre!("failed to encode BGP message: {}", e))?;
 
         if let Some(stream) = self.tcp_stream.as_mut() {
             stream
                 .write(&buf)
                 .await
-                .map_err(|e| format!("Failed to write msg to peer: {}", e))?;
+                .map_err(|e| eyre!("Failed to write msg to peer: {}", e))?;
         }
         Ok(())
     }
 
     // In the established state we accept Update, Keepalive and Notification messages.
-    async fn handle_established_msg(&mut self, msg: BGPSubmessage) -> Result<(), String> {
+    async fn handle_established_msg(&mut self, msg: BGPSubmessage) -> eyre::Result<()> {
         match msg {
             BGPSubmessage::UpdateMessage(u) => {
                 if !self.decide_accept_message(&u.path_attributes) {
@@ -1289,7 +1310,7 @@ where
             }
 
             BGPSubmessage::KeepaliveMessage(_) => Ok(()),
-            _ => Err(format!("Got unexpected message from peer: {:?}", msg)),
+            _ => bail!("Got unexpected message from peer: {:?}", msg),
         }
     }
 }

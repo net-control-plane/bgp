@@ -15,7 +15,7 @@
 use bgp_packet::{
     constants::{AddressFamilyIdentifier, SubsequentAddressFamilyIdentifier},
     nlri::NLRI,
-    path_attributes::{LargeCommunitiesPathAttribute, LargeCommunitiesPayload},
+    path_attributes::LargeCommunitiesPayload,
 };
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};

@@ -30,7 +30,7 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let subscriber = tracing_subscriber::fmt().with_env_filter("bgpd=info");
+    let subscriber = tracing_subscriber::fmt();
 
     match subscriber.try_init() {
         Ok(()) => {}

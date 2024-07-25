@@ -21,6 +21,7 @@ use crate::traits::ReadablePacket;
 use crate::traits::WritablePacket;
 use byteorder::ByteOrder;
 use byteorder::NetworkEndian;
+use eyre::bail;
 use nom::number::complete::{be_u16, be_u32, be_u8};
 use nom::Err::Failure;
 use nom::IResult;
@@ -264,15 +265,25 @@ impl fmt::Display for PathAttribute {
 // Path attribute implementations.
 
 /// Origin path attribute is a mandatory attribute defined in RFC4271.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-pub struct OriginPathAttribute(pub u8);
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize)]
+#[repr(u8)]
+pub enum OriginPathAttribute {
+    IGP = 0,
+    EGP = 1,
+    INCOMPLETE = 2,
+}
 
-pub mod origin_path_attribute_values {
-    use super::OriginPathAttribute;
+impl TryFrom<u8> for OriginPathAttribute {
+    type Error = eyre::ErrReport;
 
-    pub const IGP: OriginPathAttribute = OriginPathAttribute(0);
-    pub const EGP: OriginPathAttribute = OriginPathAttribute(1);
-    pub const UNKNOWN: OriginPathAttribute = OriginPathAttribute(2);
+    fn try_from(value: u8) -> eyre::Result<Self> {
+        match value {
+            0 => Ok(Self::IGP),
+            1 => Ok(Self::EGP),
+            2 => Ok(Self::INCOMPLETE),
+            other => bail!("Unexpected origin code {}", other),
+        }
+    }
 }
 
 impl ReadablePacket for OriginPathAttribute {
@@ -281,13 +292,15 @@ impl ReadablePacket for OriginPathAttribute {
         buf: &'a [u8],
     ) -> IResult<&'a [u8], Self, BGPParserError<&'a [u8]>> {
         let (buf, opa) = be_u8(buf)?;
-        Ok((buf, OriginPathAttribute(opa)))
+        let origin_attr = OriginPathAttribute::try_from(opa)
+            .map_err(|e| Failure(BGPParserError::CustomText(e.to_string())))?;
+        Ok((buf, origin_attr))
     }
 }
 
 impl WritablePacket for OriginPathAttribute {
     fn to_wire(&self, _: &ParserContext) -> Result<Vec<u8>, &'static str> {
-        Ok(vec![self.0])
+        Ok(vec![(*self) as u8])
     }
     fn wire_len(&self, _: &ParserContext) -> Result<u16, &'static str> {
         Ok(1)
@@ -296,12 +309,10 @@ impl WritablePacket for OriginPathAttribute {
 
 impl fmt::Display for OriginPathAttribute {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use origin_path_attribute_values::*;
         match self {
-            &IGP => write!(f, "Origin: IGP"),
-            &EGP => write!(f, "Origin: EGP"),
-            &UNKNOWN => write!(f, "Origin: Unknown"),
-            _ => write!(f, "Origin: invalid value"),
+            OriginPathAttribute::IGP => write!(f, "OriginPathAttribute::IGP"),
+            OriginPathAttribute::EGP => write!(f, "OriginPathAttribute::EGP"),
+            OriginPathAttribute::INCOMPLETE => write!(f, "OriginPathAttribute::INCOMPLETE"),
         }
     }
 }
@@ -1206,7 +1217,7 @@ mod tests {
             nom::multi::many0(|buf: &'a [u8]| PathAttribute::from_wire(ctx, buf))(path_attr_bytes)
                 .unwrap();
         assert_eq!(buf.len(), 0);
-        let expected_str = "[OriginPathAttribute(OriginPathAttribute(0)), \
+        let expected_str = "[OriginPathAttribute(IGP), \
                             ASPathAttribute(ASPathAttribute { segments: \
                                 [ASPathSegment { ordered: true, path: [39540, 25091, 2914, 6453, 8346, 13335] }] }), \
                             NextHopPathAttribute(NextHopPathAttribute(185.95.219.36)), \

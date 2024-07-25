@@ -532,9 +532,11 @@ impl Display for UpdateMessage {
         for withdrawn_nlri in &self.withdrawn_nlri {
             fmt::Display::fmt(withdrawn_nlri, f)?;
         }
+        write!(f, " announced: ")?;
         for announced_nlri in &self.announced_nlri {
             fmt::Display::fmt(announced_nlri, f)?;
         }
+        write!(f, " path attributes: ")?;
         for path_attr in &self.path_attributes {
             fmt::Display::fmt(path_attr, f)?;
         }
@@ -611,7 +613,7 @@ mod tests {
         let (buf, result) = BGPMessage::from_wire(ctx, update_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
-        let want_str = "UpdateMessage [ withdrawn: 203.1.78.0/24Origin: UnknownAS Path: { Segment [ Type: AS_SEGMENT 39540 57118 29691 1299 4739  ]] }NextHop: 185.95.219.36Communities: [  1299:35000,  29691:4000,  29691:4021,  39540:4000,  39540:4010,  57118:2000,  57118:2010,  ] LargeCommunities: [ 57118:20:0,  57118:20:10, ] ]";
+        let want_str = "UpdateMessage [ withdrawn:  announced: 203.1.78.0/24 path attributes: OriginPathAttribute::INCOMPLETEAS Path: { Segment [ Type: AS_SEGMENT 39540 57118 29691 1299 4739  ]] }NextHop: 185.95.219.36Communities: [  1299:35000,  29691:4000,  29691:4021,  39540:4000,  39540:4010,  57118:2000,  57118:2010,  ] LargeCommunities: [ 57118:20:0,  57118:20:10, ] ]";
         assert_eq!(format!("{}", result), want_str);
 
         let reencoded = result.to_wire(&ctx).unwrap();

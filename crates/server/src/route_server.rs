@@ -14,6 +14,7 @@
 
 use crate::peer::PeerCommands;
 use crate::rib_manager;
+use crate::rib_manager::PathSource;
 use crate::rib_manager::RibSnapshot;
 use crate::rib_manager::RouteManagerCommands;
 use crate::route_server::route_server::bgp_server_admin_service_server::BgpServerAdminService;
@@ -90,11 +91,14 @@ impl RouteServer {
         };
         for (_, path) in mgr_ps.1.paths {
             let proto_path = Path {
-                as_path: path.as_path,
+                as_path: path.as_path.clone(),
                 local_pref: path.local_pref,
                 med: path.med,
-                nexthop: path.nexthop,
-                peer_name: path.peer_name,
+                nexthop: path.nexthop.clone(),
+                peer_id: match path.path_source {
+                    PathSource::LocallyConfigured => vec![],
+                    PathSource::BGPPeer(peer) => peer.octets().to_vec(),
+                },
             };
             proto_pathset.paths.push(proto_path);
         }
@@ -164,11 +168,14 @@ impl RouteService for RouteServer {
                             };
                             for (_, path) in pathset.paths {
                                 let proto_path = Path {
-                                    as_path: path.as_path,
+                                    as_path: path.as_path.clone(),
                                     local_pref: path.local_pref,
                                     med: path.med,
-                                    nexthop: path.nexthop,
-                                    peer_name: path.peer_name,
+                                    nexthop: path.nexthop.clone(),
+                                    peer_id: match path.path_source {
+                                        PathSource::LocallyConfigured => vec![],
+                                        PathSource::BGPPeer(peer) => peer.octets().to_vec(),
+                                    },
                                 };
                                 proto_pathset.paths.push(proto_path);
                             }
@@ -208,11 +215,14 @@ impl RouteService for RouteServer {
                             };
                             for (_, path) in pathset.paths {
                                 let proto_path = Path {
-                                    as_path: path.as_path,
+                                    as_path: path.as_path.clone(),
                                     local_pref: path.local_pref,
                                     med: path.med,
-                                    nexthop: path.nexthop,
-                                    peer_name: path.peer_name,
+                                    nexthop: path.nexthop.clone(),
+                                    peer_id: match path.path_source {
+                                        PathSource::LocallyConfigured => vec![],
+                                        PathSource::BGPPeer(peer) => peer.octets().to_vec(),
+                                    },
                                 };
                                 proto_pathset.paths.push(proto_path);
                             }

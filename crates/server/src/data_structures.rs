@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::{net::Ipv4Addr, sync::Arc};
+
 use bgp_packet::nlri::NLRI;
 use bgp_packet::path_attributes::PathAttribute;
 
 use chrono::{DateTime, Utc};
+
+use crate::rib_manager::PathData;
 
 /// RouteInfo encapsulates information received about a particular BGP route.
 #[derive(Clone, Debug)]
@@ -43,25 +47,12 @@ pub struct RouteInfo<A> {
 /// RouteUpdate is a type which encapsulates a newly learned, modified, or removed set of prefixes.
 #[derive(Debug)]
 pub enum RouteUpdate {
-    Announce(RouteAnnounce),
+    Announce((Vec<NLRI>, Arc<PathData>)),
     Withdraw(RouteWithdraw),
 }
 
 #[derive(Debug)]
-pub struct RouteAnnounce {
-    pub peer: String,
-    pub prefixes: Vec<NLRI>,
-
-    pub local_pref: u32,
-    pub med: u32,
-    pub as_path: Vec<u32>,
-    pub nexthop: Vec<u8>,
-
-    pub path_attributes: Vec<PathAttribute>,
-}
-
-#[derive(Debug)]
 pub struct RouteWithdraw {
-    pub peer: String,
+    pub peer_id: Ipv4Addr,
     pub prefixes: Vec<NLRI>,
 }
