@@ -38,6 +38,7 @@ pub trait SouthboundInterface {
 
 /// DummyVerifier is a SouthboundInterface that checks that routes are not added more than
 /// once and not removed when there are none.
+#[derive(Clone)]
 pub struct DummyVerifier {
     route_state: HashMap<NLRI, IpAddr>,
 }

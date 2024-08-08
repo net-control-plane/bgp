@@ -1,5 +1,6 @@
-use clap::Parser;
-use eyre::Result;
+use clap::{Parser, Subcommand};
+use eyre::{bail, Result};
+use route_client::southbound_interface::{DummyVerifier, SouthboundInterface};
 use tracing::{info, warn};
 
 use route_client::netlink::NetlinkConnector;
@@ -12,11 +13,25 @@ use route_client::{run_connector_v4, run_connector_v6};
     about = "Installs routes from a BGP speaker via streaming RPC to the forwarding plane"
 )]
 struct Cli {
+    /// route_server is the gRPC endpoint to connect to for streaming routes from.
     #[clap(long = "route_server")]
     route_server: String,
-    #[clap(long = "rt_table")]
-    rt_table: Option<u32>,
-    dry_run: bool,
+    #[clap(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// InstallKernel installs the routes received into the kernel routing table.
+    InstallKernel {
+        #[arg(default_value_t = 201)]
+        rt_table: u32,
+        #[arg(default_value_t = false)]
+        dry_run: bool,
+    },
+    /// Verify performs consistency checks on the inbound stream of routes to ensure
+    /// that there are no spurious removals or duplicate entries.
+    Verify,
 }
 
 #[tokio::main]
@@ -27,36 +42,42 @@ async fn main() -> Result<()> {
 
     info!("Starting route client");
 
-    let rt_table = match args.rt_table {
-        Some(table) => table,
-        None => 201,
+    match args.command {
+        Some(Commands::InstallKernel { rt_table, dry_run }) => {
+            let southbound = NetlinkConnector::new(Some(rt_table)).await?;
+            run_connector::<NetlinkConnector>(args.route_server, dry_run, southbound).await
+        }
+        Some(Commands::Verify) => {
+            let southbound = DummyVerifier::default();
+            run_connector::<DummyVerifier>(args.route_server, false, southbound).await
+        }
+        None => bail!("A subcommand must be specified."),
     };
 
+    Ok(())
+}
+
+async fn run_connector<S: SouthboundInterface + Clone + Send + Sync + 'static>(
+    server_addr: String,
+    dry_run: bool,
+    southbound: S,
+) {
     let v4_joinhandle = {
-        let server_addr = args.route_server.clone();
+        let server_addr = server_addr.clone();
+        let southbound = southbound.clone();
         tokio::task::spawn(async move {
-            run_connector_v4::<NetlinkConnector>(
-                server_addr.clone(),
-                rt_table,
-                args.dry_run,
-                NetlinkConnector::new(Some(rt_table)).await.unwrap(),
-            )
-            .await
-            .unwrap();
+            run_connector_v4::<S>(server_addr.clone(), dry_run, southbound)
+                .await
+                .unwrap();
         })
     };
 
     let v6_joinhandle = {
-        let server_addr = args.route_server.clone();
+        let server_addr = server_addr.clone();
         tokio::task::spawn(async move {
-            run_connector_v6::<NetlinkConnector>(
-                server_addr,
-                rt_table,
-                args.dry_run,
-                NetlinkConnector::new(Some(rt_table)).await.unwrap(),
-            )
-            .await
-            .unwrap();
+            run_connector_v6::<S>(server_addr, dry_run, southbound)
+                .await
+                .unwrap();
         })
     };
 
@@ -68,6 +89,4 @@ async fn main() -> Result<()> {
             warn!("Unexpected exit of IPv6 connector");
         }
     }
-
-    Ok(())
 }

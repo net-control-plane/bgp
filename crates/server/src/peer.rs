@@ -568,7 +568,6 @@ where
                     self.hold_timer_expired().await?;
                 }
                 PeerTimerEvent::KeepaliveTimerExpire() => {
-                    trace!("Keepalive timer expired");
                     self.send_keepalive().await?;
                 }
             },
@@ -867,7 +866,6 @@ where
     /// keepalive message.
     /// Takes a lock on the peer object.
     async fn send_keepalive(&mut self) -> Result<(), std::io::Error> {
-        info!("Sending keepalive");
         match self.tcp_stream.as_mut() {
             Some(conn) => {
                 let keepalive = BGPMessage {

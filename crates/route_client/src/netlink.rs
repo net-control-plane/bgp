@@ -17,6 +17,7 @@ use super::southbound_interface::SouthboundInterface;
 
 /// NetlinkConnector implements methods to read/update Linux networking stuff including
 /// routes and link level info.
+#[derive(Clone)]
 pub struct NetlinkConnector {
     handle: rtnetlink::Handle,
     table: Option<u32>,

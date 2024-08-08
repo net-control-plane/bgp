@@ -14,7 +14,7 @@
 
 use bgp_server::bgp_server::Server;
 use bgp_server::config::ServerConfig;
-use clap::{App, Arg};
+use clap::Parser;
 use core::sync::atomic::AtomicBool;
 use libc::SIGUSR1;
 use signal_hook::consts::signal::*;
@@ -28,6 +28,13 @@ use std::process::exit;
 use std::sync::Arc;
 use tracing::info;
 
+#[derive(Parser)]
+#[command(author = "Rayhaan Jaufeerally <rayhaan@rayhaan.ch>", version = "0.1")]
+struct Cli {
+    #[arg(short = 'c', long = "config")]
+    config_path: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let subscriber = tracing_subscriber::fmt();
@@ -40,16 +47,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let argv_matches = App::new("bgpd")
-        .author("Rayhaan Jaufeerally <rayhaan@rayhaan.ch>")
-        .version("0.1")
-        .about("net-control-plane BGP daemon")
-        .arg(Arg::with_name("config").takes_value(true))
-        .get_matches();
+    let args = Cli::parse();
 
     info!("Starting BGP Daemon!");
 
-    let config_file = File::open(argv_matches.value_of("config").unwrap_or("config.json")).unwrap();
+    let config_file = File::open(args.config_path).unwrap();
     let reader = BufReader::new(config_file);
     let server_config: ServerConfig = serde_json::from_reader(reader).unwrap();
 

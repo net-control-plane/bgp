@@ -41,12 +41,11 @@ pub struct FibState<A: Address, S: SouthboundInterface> {
     pub fib: IpLookupTable<A, Arc<Mutex<FibEntry>>>,
     pub southbound: S,
     pub af: AddressFamilyIdentifier,
-    pub table: u32,
 }
 
 impl<A: Address, S: SouthboundInterface> std::fmt::Debug for FibState<A, S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "FibState af: {:?}, table: {}", self.af, self.table)
+        write!(f, "FibState af: {:?}", self.af)
     }
 }
 

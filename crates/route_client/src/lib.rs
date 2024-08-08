@@ -65,7 +65,6 @@ fn select_best_route(ps: &proto::PathSet) -> Option<proto::Path> {
 
 pub async fn run_connector_v4<S: SouthboundInterface>(
     route_server: String,
-    rt_table: u32,
     dry_run: bool,
     southbound: S,
 ) -> Result<()> {
@@ -74,7 +73,6 @@ pub async fn run_connector_v4<S: SouthboundInterface>(
         fib: IpLookupTable::new(),
         southbound,
         af: AddressFamilyIdentifier::Ipv4,
-        table: rt_table,
     };
 
     let uri = Uri::from_str(route_server.as_str()).unwrap();
@@ -135,7 +133,6 @@ pub async fn run_connector_v4<S: SouthboundInterface>(
 
 pub async fn run_connector_v6<S: SouthboundInterface>(
     route_server: String,
-    rt_table: u32,
     dry_run: bool,
     southbound: S,
 ) -> Result<()> {
@@ -143,7 +140,6 @@ pub async fn run_connector_v6<S: SouthboundInterface>(
         fib: IpLookupTable::new(),
         southbound,
         af: AddressFamilyIdentifier::Ipv6,
-        table: rt_table,
     };
 
     let uri = Uri::from_str(route_server.as_str()).unwrap();
