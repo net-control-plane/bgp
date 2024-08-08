@@ -640,41 +640,42 @@ where
         // Close the TCP stream.
         if let Some(stream) = self.tcp_stream.as_mut() {
             match stream.shutdown().await {
-                Ok(_) => info!("Closed TCP stream with peer: {}", self.config.name),
-                Err(e) => warn!(
-                    "Failed to close TCP stream with peer {}: {}",
-                    self.config.name,
-                    e.to_string()
-                ),
+                Ok(_) => trace!("Closed TCP stream with peer: {}", self.config.name),
+                Err(_) => { /* Ignore errors since the connection is already defunct. */ }
             }
         }
 
-        let peer_id = match &self.peer_open_msg {
-            Some(peer_open_msg) => peer_open_msg.identifier,
-            None => bail!("Missing peer open msg"),
-        };
+        // If the state is open, then we cleanup the routes from this peer.
+        // TODO: This should only be done after the hold timer has expired but for
+        // simplicity we do it here now.
+        if matches!(self.state, BGPState::Established) {
+            if let Some(peer_open_msg) = &self.peer_open_msg {
+                let peer_id = peer_open_msg.identifier;
+                // Iterate over every route that we've announced to the route manager
+                // and withdraw it.
+                let mut route_withdraw = RouteWithdraw {
+                    peer_id,
+                    prefixes: vec![],
+                };
 
-        // Iterate over every route that we've announced to the route manager
-        // and withdraw it.
-        let mut route_withdraw = RouteWithdraw {
-            peer_id,
-            prefixes: vec![],
-        };
+                for prefix in self.prefixes_in.iter_mut() {
+                    route_withdraw.prefixes.push(prefix.2.nlri.clone());
+                }
 
-        for prefix in self.prefixes_in.iter_mut() {
-            route_withdraw.prefixes.push(prefix.2.nlri.clone());
+                self.route_manager
+                    .send(RouteManagerCommands::Update(RouteUpdate::Withdraw(
+                        route_withdraw,
+                    )))
+                    .map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::BrokenPipe, e.to_string())
+                    })?;
+
+                // Clear prefixes_in.
+                self.prefixes_in = IpLookupTable::new();
+            }
         }
 
-        self.route_manager
-            .send(RouteManagerCommands::Update(RouteUpdate::Withdraw(
-                route_withdraw,
-            )))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, e.to_string()))?;
-
-        // Clear prefixes_in.
-        self.prefixes_in = IpLookupTable::new();
-
-        // Set the state machine back to the expected.
+        // On any connection close we reset the state back to Active, regardless of the state we were in before.
         self.state = BGPState::Active;
         self.established_time = None;
 
