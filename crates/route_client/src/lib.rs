@@ -16,7 +16,6 @@ pub mod fib_state;
 pub mod netlink;
 pub mod southbound_interface;
 
-use log::trace;
 use std::convert::TryInto;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
@@ -32,7 +31,7 @@ use eyre::{anyhow, Result};
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use tonic::transport::Endpoint;
 use tonic::transport::Uri;
-use tracing::info;
+use tracing::{info, trace, warn};
 
 use crate::fib_state::FibState;
 use crate::proto::route_service_client::RouteServiceClient;
@@ -101,13 +100,13 @@ pub async fn run_connector_v4<S: SouthboundInterface>(
                     let nh_bytes: [u8; 4] = vec_to_array(best.nexthop.clone())?;
                     let nh_addr: Ipv4Addr = Ipv4Addr::from(nh_bytes);
                     if let Err(e) = fib_state.route_add(&nlri, IpAddr::V4(nh_addr)).await {
-                        return Err(anyhow!("Failed to add route {}: {}", nlri, e));
+                        warn!("Failed to add route into kernel: {}: {}", nlri, e);
                     }
                 }
             } else {
                 // No more paths, delete
                 if let Err(e) = fib_state.route_del(nlri).await {
-                    return Err(anyhow!("Failed to delete route: {}", e));
+                    warn!("Failed to delete route from kernel: {}", e);
                 }
             }
         }
@@ -169,13 +168,13 @@ pub async fn run_connector_v6<S: SouthboundInterface>(
                     let nh_bytes: [u8; 16] = vec_to_array(best.nexthop.clone())?;
                     let nh_addr: Ipv6Addr = Ipv6Addr::from(nh_bytes);
                     if let Err(e) = fib_state.route_add(&nlri, IpAddr::V6(nh_addr)).await {
-                        return Err(anyhow!("Failed to add route {}: {}", nlri, e));
+                        warn!("Failed to add route into kernel: {}: {}", nlri, e);
                     }
                 }
             } else {
                 // No more paths, delete
                 if let Err(e) = fib_state.route_del(nlri).await {
-                    return Err(anyhow!("Failed to delete route: {}", e));
+                    warn!("Failed to delete route from kernel: {}", e);
                 }
             }
         }
