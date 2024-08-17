@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use bgp_server::bgp_server::Server;
-use bgp_server::config::ServerConfig;
 use clap::Parser;
 use core::sync::atomic::AtomicBool;
 use libc::SIGUSR1;
@@ -22,11 +20,17 @@ use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::flag;
 use signal_hook::iterator::exfiltrator::WithOrigin;
 use signal_hook::iterator::SignalsInfo;
+use tracing::info;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
+
 use std::fs::File;
 use std::io::BufReader;
-use std::process::exit;
 use std::sync::Arc;
-use tracing::info;
+
+use bgp_server::bgp_server::Server;
+use bgp_server::config::ServerConfig;
 
 #[derive(Parser)]
 #[command(author = "Rayhaan Jaufeerally <rayhaan@rayhaan.ch>", version = "0.1")]
@@ -37,15 +41,10 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let subscriber = tracing_subscriber::fmt();
-
-    match subscriber.try_init() {
-        Ok(()) => {}
-        Err(e) => {
-            eprintln!("Failed to initialize logger: {:?}", e);
-            exit(1);
-        }
-    }
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
 
     let args = Cli::parse();
 
@@ -54,8 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_file = File::open(args.config_path).unwrap();
     let reader = BufReader::new(config_file);
     let server_config: ServerConfig = serde_json::from_reader(reader).unwrap();
-
-    info!("Parsed server config");
 
     let mut bgp_server = Server::new(server_config);
     bgp_server.start(true).await.unwrap();

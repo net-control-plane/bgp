@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::lock::Mutex;
+use eyre::Result;
 use ip_network_table_deps_treebitmap::address::Address;
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use std::convert::{TryFrom, TryInto};
@@ -20,6 +20,7 @@ use std::fmt::Formatter;
 use std::net::Ipv6Addr;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::{trace, warn};
 
 use bgp_packet::constants::AddressFamilyIdentifier;
@@ -80,6 +81,10 @@ impl<
 where
     String: From<<A as TryFrom<NLRI>>::Error>,
 {
+    pub async fn get_routing_table(&mut self) -> Result<()> {
+        todo!();
+    }
+
     /// route_add requests updating the nexthop to a particular path if it is not already
     /// the best path.
     pub async fn route_add(&mut self, nlri: &NLRI, nexthop: IpAddr) -> Result<(), String> {
@@ -151,6 +156,7 @@ where
                 let addr: A = nlri.clone().try_into()?;
                 self.fib
                     .insert(addr, nlri.prefixlen.into(), Arc::new(Mutex::new(entry)));
+                trace!(nlri = %nlri, "Added to kernel");
             }
         };
         Ok(())

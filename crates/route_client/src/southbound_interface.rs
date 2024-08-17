@@ -34,6 +34,11 @@ pub trait SouthboundInterface {
     ) -> Result<()>;
     /// route_del removes the route towards a particular prefix via a given nexthop.
     async fn route_del(&mut self, prefix: NLRI, nexthop: IpAddr) -> Result<()>;
+    /// get_all_routes returns all the routes for the given address family.
+    async fn get_all_routes(
+        &mut self,
+        address_family: AddressFamilyIdentifier,
+    ) -> Result<Vec<(NLRI, IpAddr)>>;
 }
 
 /// DummyVerifier is a SouthboundInterface that checks that routes are not added more than
@@ -53,6 +58,13 @@ impl std::default::Default for DummyVerifier {
 
 #[async_trait]
 impl SouthboundInterface for DummyVerifier {
+    async fn get_all_routes(
+        &mut self,
+        address_family: AddressFamilyIdentifier,
+    ) -> Result<Vec<(NLRI, IpAddr)>> {
+        todo!();
+    }
+
     async fn route_add(
         &mut self,
         _: AddressFamilyIdentifier,

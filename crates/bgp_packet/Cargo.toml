@@ -12,10 +12,12 @@ version.workspace      = true
 workspace = true
 
 [dependencies]
-byteorder            = "1.4.3"
-bytes.workspace      = true
-eyre.workspace       = true
-nom                  = "7.1"
-serde.workspace      = true
-serde_json.workspace = true
-tokio-util           = { version = "0.7.10", features = ["codec"] }
+byteorder                      = "1.4.3"
+bytes.workspace                = true
+eyre.workspace                 = true
+netlink-packet-route.workspace = true
+nom                            = "7.1"
+rtnetlink.workspace            = true
+serde.workspace                = true
+serde_json.workspace           = true
+tokio-util                     = { version = "0.7.10", features = ["codec"] }

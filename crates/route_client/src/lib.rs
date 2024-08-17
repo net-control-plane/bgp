@@ -19,19 +19,18 @@ pub mod southbound_interface;
 use std::convert::TryInto;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
-
 use std::net::Ipv6Addr;
 use std::str::FromStr;
 use std::time::Duration;
 
-use bgp_packet::constants::AddressFamilyIdentifier;
-use bgp_packet::nlri::NLRI;
-
-use eyre::{anyhow, Result};
+use eyre::Result;
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use tonic::transport::Endpoint;
 use tonic::transport::Uri;
-use tracing::{info, trace, warn};
+use tracing::{trace, warn};
+
+use bgp_packet::constants::AddressFamilyIdentifier;
+use bgp_packet::nlri::NLRI;
 
 use crate::fib_state::FibState;
 use crate::proto::route_service_client::RouteServiceClient;
@@ -147,7 +146,6 @@ pub async fn run_connector_v6<S: SouthboundInterface>(
     let request = proto::StreamPathsRequest {
         address_family: proto::AddressFamily::IPv6.into(),
     };
-    info!("Request: {:?}", request);
 
     let mut stream = client.stream_paths(request).await?.into_inner();
     let mut msg_ctr: u64 = 0;

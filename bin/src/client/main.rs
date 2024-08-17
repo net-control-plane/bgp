@@ -5,6 +5,9 @@ use tracing::{info, warn};
 
 use route_client::netlink::NetlinkConnector;
 use route_client::{run_connector_v4, run_connector_v6};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 #[clap(
@@ -38,7 +41,10 @@ enum Commands {
 async fn main() -> Result<()> {
     let args = Cli::parse();
 
-    tracing_subscriber::fmt().pretty().init();
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
 
     info!("Starting route client");
 

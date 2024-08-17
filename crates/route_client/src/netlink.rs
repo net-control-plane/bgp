@@ -25,6 +25,18 @@ pub struct NetlinkConnector {
 
 #[async_trait]
 impl SouthboundInterface for NetlinkConnector {
+    async fn get_all_routes(
+        &mut self,
+        address_family: AddressFamilyIdentifier,
+    ) -> Result<Vec<(NLRI, IpAddr)>> {
+        let route = self.handle.route();
+
+        let mut get_request = route.get(address_family.into());
+        get_request.message_mut().header.table = 201;
+
+        todo!();
+    }
+
     async fn route_add(
         &mut self,
         address_family: AddressFamilyIdentifier,

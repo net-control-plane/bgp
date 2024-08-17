@@ -59,6 +59,25 @@ impl Into<Vec<u8>> for AddressFamilyIdentifier {
     }
 }
 
+/// Convenience functions to convert AddressFamilyIdentifier into those used by netlink.
+impl Into<netlink_packet_route::AddressFamily> for AddressFamilyIdentifier {
+    fn into(self) -> netlink_packet_route::AddressFamily {
+        match self {
+            AddressFamilyIdentifier::Ipv4 => netlink_packet_route::AddressFamily::Inet,
+            AddressFamilyIdentifier::Ipv6 => netlink_packet_route::AddressFamily::Inet6,
+        }
+    }
+}
+
+impl Into<rtnetlink::IpVersion> for AddressFamilyIdentifier {
+    fn into(self) -> rtnetlink::IpVersion {
+        match self {
+            AddressFamilyIdentifier::Ipv4 => rtnetlink::IpVersion::V4,
+            AddressFamilyIdentifier::Ipv6 => rtnetlink::IpVersion::V6,
+        }
+    }
+}
+
 /// This parser for AFI makes it easier to write the other message parsers.
 impl ReadablePacket for AddressFamilyIdentifier {
     fn from_wire<'a>(
