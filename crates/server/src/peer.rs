@@ -16,7 +16,9 @@ use crate::config::{PeerConfig, ServerConfig};
 use crate::data_structures::RouteWithdraw;
 use crate::data_structures::{RouteInfo, RouteUpdate};
 use crate::filter_eval::FilterEvaluator;
-use crate::rib_manager::{PathData, PathSource, RouteManagerCommands};
+use crate::path::path_data::PathData;
+use crate::path::path_set::PathSource;
+use crate::rib_manager::RouteManagerCommands;
 use crate::route_server::route_server::PeerStatus;
 use bgp_packet::capabilities::{
     BGPCapability, BGPCapabilityTypeValues, BGPCapabilityValue, BGPOpenOptionTypeValues,
@@ -327,9 +329,9 @@ pub struct PeerStateMachine<A: Address> {
     /// the whole structure represents ADJ-RIB-IN.
     prefixes_in: IpLookupTable<A, RouteInfo<A>>,
 
-    // prefixes_out contains the routes we want to export to the peer.
-    // TODO: Use this.
-    //prefixes_out: IpLookupTable<A, RouteUpdate>,
+    /// prefixes_out contains all the prefixes that we know of which can
+    /// be sent to the peer (unfiltered).
+    prefixes_out: IpLookupTable<A, Arc<PathData>>,
 
     // Interface to this state machine
     pub iface_rx: mpsc::UnboundedReceiver<PeerCommands>,
@@ -385,6 +387,7 @@ where
                 },
             })),
             prefixes_in: IpLookupTable::new(),
+            prefixes_out: IpLookupTable::new(),
             iface_rx,
             iface_tx,
             route_manager,

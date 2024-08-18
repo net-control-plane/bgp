@@ -19,7 +19,7 @@ use bgp_packet::path_attributes::PathAttribute;
 
 use chrono::{DateTime, Utc};
 
-use crate::rib_manager::PathData;
+use crate::path::path_data::PathData;
 
 /// RouteInfo encapsulates information received about a particular BGP route.
 #[derive(Clone, Debug)]
@@ -53,6 +53,8 @@ pub enum RouteUpdate {
 
 #[derive(Debug)]
 pub struct RouteWithdraw {
+    /// The peer identifier of the peer that sent the withdrawal.
     pub peer_id: Ipv4Addr,
+    /// The prefixes which have been withdrawn.
     pub prefixes: Vec<NLRI>,
 }

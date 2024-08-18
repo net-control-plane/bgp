@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::path::path_set::PathSet;
+use crate::path::path_set::PathSource;
 use crate::peer::PeerCommands;
-use crate::rib_manager;
-use crate::rib_manager::PathSource;
 use crate::rib_manager::RibSnapshot;
 use crate::rib_manager::RouteManagerCommands;
 use crate::route_server::route_server::bgp_server_admin_service_server::BgpServerAdminService;
@@ -23,12 +23,13 @@ use crate::route_server::route_server::AddressFamily;
 use crate::route_server::route_server::DumpPathsRequest;
 use crate::route_server::route_server::DumpPathsResponse;
 use crate::route_server::route_server::Path;
-use crate::route_server::route_server::PathSet;
 use crate::route_server::route_server::Prefix;
 use crate::route_server::route_server::StreamPathsRequest;
+
 use bgp_packet::constants::AddressFamilyIdentifier;
 use route_server::PeerStatusRequest;
 use route_server::PeerStatusResponse;
+
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
@@ -58,10 +59,9 @@ impl RouteServer {
         &self,
         manager: UnboundedSender<RouteManagerCommands<A>>,
         // dump_tx is used to receive the current state before streaming starts.
-        dump_tx: UnboundedSender<(u64, rib_manager::PathSet<A>)>,
-    ) -> Result<broadcast::Receiver<(u64, rib_manager::PathSet<A>)>, Status> {
-        let (stream_tx, stream_rx) =
-            oneshot::channel::<broadcast::Receiver<(u64, rib_manager::PathSet<A>)>>();
+        dump_tx: UnboundedSender<(u64, PathSet<A>)>,
+    ) -> Result<broadcast::Receiver<(u64, PathSet<A>)>, Status> {
+        let (stream_tx, stream_rx) = oneshot::channel::<broadcast::Receiver<(u64, PathSet<A>)>>();
         if let Err(e) = manager.send(RouteManagerCommands::StreamRib(dump_tx, stream_tx)) {
             warn!("Failed to send StreamRib command to route manager: {}", e);
             return Err(tonic::Status::internal(
@@ -77,19 +77,19 @@ impl RouteServer {
     /// Converts a rib_manager::PathSet into the proto format PathSet using the
     /// appropriate address family.
     fn transform_pathset<A>(
-        mgr_ps: (u64, rib_manager::PathSet<A>),
+        mgr_ps: (u64, PathSet<A>),
         address_family: i32,
-    ) -> PathSet {
-        let mut proto_pathset = PathSet {
+    ) -> route_server::PathSet {
+        let mut proto_pathset = route_server::PathSet {
             epoch: mgr_ps.0,
             prefix: Some(Prefix {
-                ip_prefix: mgr_ps.1.nlri.prefix,
-                prefix_len: mgr_ps.1.nlri.prefixlen.into(),
+                ip_prefix: mgr_ps.1.nlri().prefix.clone(),
+                prefix_len: mgr_ps.1.nlri().prefixlen.into(),
                 address_family,
             }),
             paths: vec![],
         };
-        for (_, path) in mgr_ps.1.paths {
+        for path in mgr_ps.1.path_iter() {
             let proto_path = Path {
                 as_path: path.as_path.clone(),
                 local_pref: path.local_pref,
@@ -167,16 +167,16 @@ impl RouteService for RouteServer {
                     Ok(result) => {
                         response.epoch = result.epoch;
                         for pathset in result.routes {
-                            let mut proto_pathset = PathSet {
+                            let mut proto_pathset = route_server::PathSet {
                                 epoch: result.epoch,
                                 prefix: Some(Prefix {
-                                    ip_prefix: pathset.nlri.prefix,
-                                    prefix_len: pathset.nlri.prefixlen.into(),
+                                    ip_prefix: pathset.nlri().prefix.clone(),
+                                    prefix_len: pathset.nlri().prefixlen.into(),
                                     address_family: AddressFamily::IPv4.into(),
                                 }),
                                 paths: vec![],
                             };
-                            for (_, path) in pathset.paths {
+                            for path in pathset.path_iter() {
                                 let proto_path = Path {
                                     as_path: path.as_path.clone(),
                                     local_pref: path.local_pref,
@@ -214,16 +214,16 @@ impl RouteService for RouteServer {
                     Ok(result) => {
                         response.epoch = result.epoch;
                         for pathset in result.routes {
-                            let mut proto_pathset = PathSet {
+                            let mut proto_pathset = route_server::PathSet {
                                 epoch: result.epoch,
                                 prefix: Some(Prefix {
-                                    ip_prefix: pathset.nlri.prefix,
-                                    prefix_len: pathset.nlri.prefixlen.into(),
+                                    ip_prefix: pathset.nlri().prefix.clone(),
+                                    prefix_len: pathset.nlri().prefixlen.into(),
                                     address_family: AddressFamily::IPv6.into(),
                                 }),
                                 paths: vec![],
                             };
-                            for (_, path) in pathset.paths {
+                            for path in pathset.path_iter() {
                                 let proto_path = Path {
                                     as_path: path.as_path.clone(),
                                     local_pref: path.local_pref,
@@ -252,7 +252,7 @@ impl RouteService for RouteServer {
         }
     }
 
-    type StreamPathsStream = ReceiverStream<Result<PathSet, Status>>;
+    type StreamPathsStream = ReceiverStream<Result<route_server::PathSet, Status>>;
 
     async fn stream_paths(
         &self,

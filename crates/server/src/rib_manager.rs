@@ -14,20 +14,17 @@
 
 use crate::config::PeerConfig;
 use crate::data_structures::RouteUpdate;
+use crate::path::path_data::PathData;
+use crate::path::path_set::PathSet;
+use crate::path::path_set::PathSource;
 use crate::peer::PeerCommands;
 
-use std::cmp::Eq;
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 use bgp_packet::nlri::NLRI;
-use bgp_packet::path_attributes::OriginPathAttribute;
-use bgp_packet::path_attributes::PathAttribute;
-use chrono::{DateTime, Utc};
 use eyre::{bail, eyre};
 use ip_network_table_deps_treebitmap::address::Address;
 use serde::Serialize;
@@ -40,86 +37,6 @@ use tracing::{info, trace, warn};
 use super::data_structures::RouteWithdraw;
 
 type PeerInterface = mpsc::UnboundedSender<PeerCommands>;
-
-#[derive(Debug, Clone, Serialize)]
-pub enum PathSource {
-    LocallyConfigured,
-    /// BGPPeer represents a path that has been learned from a BGP peer,
-    /// and contains the Router ID of the peer.
-    BGPPeer(Ipv4Addr),
-}
-
-/// PathData is a structure to contain a specific route via one nexthop.
-/// Note that currently there is an assumption that there is only
-/// one route per peer per prefix, but when ADD-PATH support is added
-/// this will no longer hold true.
-#[derive(Debug, Clone, Serialize)]
-pub struct PathData {
-    /// The origin through which this path was learned. This is set to EGP when learned from
-    /// another peer, set to IGP when statically configured or from another control plane.
-    pub origin: OriginPathAttribute,
-    /// The nexthop that traffic can be sent to.
-    pub nexthop: Vec<u8>,
-    /// Where this path was learned from.
-    pub path_source: PathSource,
-    /// The local pref of this path.
-    pub local_pref: u32,
-    /// The multi exit discriminator of this path.
-    pub med: u32,
-    /// The path of autonomous systems to the destination along this path.
-    pub as_path: Vec<u32>,
-    /// Path attributes received from the peer.
-    pub path_attributes: Vec<PathAttribute>,
-    /// When the path was learned.
-    pub learn_time: DateTime<Utc>,
-}
-
-impl PartialEq for PathData {
-    fn eq(&self, other: &PathData) -> bool {
-        // Local pref.
-        if self.local_pref > other.local_pref {
-            return true;
-        }
-
-        // Prefer paths that are locally originated.
-        if matches!(self.path_source, PathSource::LocallyConfigured) {
-            return true;
-        }
-
-        // AS path length.
-        if self.as_path.len() < other.as_path.len() {
-            return true;
-        }
-
-        // IGP < EGP < INCOMPLETE
-        if (self.origin as u8) < (other.origin as u8) {
-            return true;
-        }
-
-        // MED lower is better, only checked if the announcing ASN is the same.
-        if let (Some(announcing_as_self), Some(announcing_as_other)) =
-            (self.as_path.last(), other.as_path.last())
-        {
-            if announcing_as_self == announcing_as_other && self.med < other.med {
-                return true;
-            }
-        }
-
-        // Pick the oldest path to prefer more stable ones.
-        self.learn_time < other.learn_time
-    }
-}
-
-impl Eq for PathData {}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct PathSet<A> {
-    pub addr: A,
-    pub prefixlen: u8,
-    pub nlri: NLRI,
-    /// Sorted map keyed by the BGP Identifier of the peer that sent the route.
-    pub paths: BTreeMap<Ipv4Addr, Arc<PathData>>,
-}
 
 /// RibSnapshot contians a version number and the dump of all the routes.
 #[derive(Debug, Serialize)]
@@ -261,26 +178,15 @@ where
             let prefixlen = nlri.prefixlen;
             if let Some(path_set_wrapped) = self.rib.exact_match(addr, prefixlen.into()) {
                 let mut path_set = path_set_wrapped.lock().unwrap();
-                // There is already this prefix in the RIB, check if this is a
-                // reannouncement or fresh announcement.
-                match path_set.paths.get_mut(&peer_router_id) {
-                    // Peer already announced this route before.
-                    Some(existing) => {
-                        trace!(
-                            "Updating existing path attributes for NLRI: {}/{}",
-                            addr,
-                            prefixlen
-                        );
-                        *existing = update.1.clone();
-                    }
-                    // First time that this peer is announcing the route.
-                    None => {
-                        path_set.paths.insert(peer_router_id, update.1.clone());
+
+                if let Some(new_best) = path_set.insert_pathdata(&peer_router_id, &update.1) {
+                    for (_config, peer) in self.peers.values() {
+                        peer.send(PeerCommands::Announce(RouteUpdate::Announce((
+                            vec![nlri.clone()],
+                            new_best.clone(),
+                        ))))?;
                     }
                 }
-
-                // There is no explicit sorting and marking of the best path since
-                // BTreeMap is already sorted.
 
                 // Ignore errors sending due to no active receivers on the channel.
                 let _ = self
@@ -288,13 +194,19 @@ where
                     .send((self.epoch, path_set.clone()));
             } else {
                 // This prefix has never been seen before, so add a new PathSet for it.
-                let mut path_set = PathSet::<A> {
-                    addr,
-                    prefixlen: nlri.prefixlen,
-                    nlri,
-                    paths: BTreeMap::new(),
-                };
-                path_set.paths.insert(peer_router_id, update.1.clone());
+                let mut path_set = PathSet::<A>::new(addr, nlri.prefixlen, nlri.clone());
+
+                if let Some(new_best) = path_set.insert_pathdata(&peer_router_id, &update.1) {
+                    for (_config, peer) in self.peers.values() {
+                        peer.send(PeerCommands::Announce(RouteUpdate::Announce((
+                            vec![nlri.clone()],
+                            new_best.clone(),
+                        ))))?;
+                    }
+                } else {
+                    bail!("Inconsistent state, adding new pathdata but no new best path");
+                }
+
                 self.rib
                     .insert(addr, prefixlen.into(), Mutex::new(path_set.clone()));
 
@@ -313,19 +225,45 @@ where
             let mut pathset_empty = false;
             if let Some(path_set_wrapped) = self.rib.exact_match(addr, nlri.prefixlen.into()) {
                 let mut path_set = path_set_wrapped.lock().unwrap();
-                let removed = path_set.paths.remove(&update.peer_id);
-                if removed.is_none() {
-                    warn!(
-                        "Got a withdrawal for route {} from {}, which was not in RIB",
-                        nlri, update.peer_id
-                    );
+                let removed = path_set.remove_pathdata(&update.peer_id, &nlri);
+
+                match removed {
+                    Err(_e) => {
+                        warn!(
+                            "Got a withdrawal for route {} from {}, which was not in RIB",
+                            nlri, update.peer_id
+                        );
+                    }
+                    Ok(Some(new_best)) => {
+                        // Communicate new_best to all peers.
+                        for (_config, peer) in self.peers.values() {
+                            peer.send(PeerCommands::Announce(RouteUpdate::Announce((
+                                vec![nlri.clone()],
+                                new_best.clone(),
+                            ))))?;
+                        }
+                    }
+                    Ok(None) => {
+                        // Do nothing here since we check below if the path is withdrawn.
+                    }
                 }
+
                 // Ignore errors sending due to no active receivers on the channel.
                 let _ = self
                     .pathset_streaming_handle
                     .send((self.epoch, path_set.clone()));
-                if path_set.paths.is_empty() {
+
+                if path_set.is_empty() {
                     pathset_empty = true;
+
+                    for (_config, peer) in self.peers.values() {
+                        peer.send(PeerCommands::Announce(RouteUpdate::Withdraw(
+                            RouteWithdraw {
+                                peer_id: update.peer_id,
+                                prefixes: vec![nlri.clone()],
+                            },
+                        )))?;
+                    }
                 }
             } else {
                 warn!(
@@ -333,6 +271,7 @@ where
                     nlri, update.peer_id
                 );
             }
+
             if pathset_empty {
                 self.rib.remove(addr, nlri.prefixlen.into());
             }
@@ -402,10 +341,9 @@ mod tests {
         let prefixlen: u32 = 32;
 
         let lookup_result = rib_manager.lookup_path_exact(addr, prefixlen).unwrap();
-        assert_eq!(lookup_result.paths.len(), 1);
+        assert_eq!(lookup_result.len(), 1);
         let path_result = lookup_result
-            .paths
-            .get(&"1.2.3.4".parse().unwrap())
+            .get_by_announcer(&"1.2.3.4".parse().unwrap())
             .unwrap();
         assert_eq!(path_result.nexthop, nexthop.octets().to_vec());
     }
