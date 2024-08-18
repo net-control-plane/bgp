@@ -21,7 +21,7 @@ use std::net::Ipv6Addr;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{trace, warn};
+use tracing::{info, trace, warn};
 
 use bgp_packet::constants::AddressFamilyIdentifier;
 use bgp_packet::nlri::NLRI;
@@ -88,6 +88,7 @@ where
     /// route_add requests updating the nexthop to a particular path if it is not already
     /// the best path.
     pub async fn route_add(&mut self, nlri: &NLRI, nexthop: IpAddr) -> Result<(), String> {
+        info!(af = ?self.af, %nlri, %nexthop);
         // Lookup the path in the Fib, there are three possible outcomes:
         // 1. The route is not yet known, we add it to the FibState and inject it into the kernel,
         // 2. The route is known and has a prior nexthop that needs to be updated
@@ -156,7 +157,7 @@ where
                 let addr: A = nlri.clone().try_into()?;
                 self.fib
                     .insert(addr, nlri.prefixlen.into(), Arc::new(Mutex::new(entry)));
-                trace!(nlri = %nlri, "Added to kernel");
+                trace!(af = ?self.af, nlri = %nlri, nexthop = %nexthop, "Added to kernel");
             }
         };
         Ok(())
@@ -168,6 +169,7 @@ where
         if let Some(entry_wrapped) = self.fib.exact_match(prefix_addr, nlri.prefixlen.into()) {
             {
                 let entry = entry_wrapped.lock().await;
+                info!(%nlri, %prefix_addr, %entry.nexthop, "route_del");
                 if let Err(e) = self.southbound.route_del(nlri.clone(), entry.nexthop).await {
                     warn!(
                         "Failed to apply route mutation to remove NLRI: {}, error: {}",
@@ -179,6 +181,55 @@ where
         } else {
             warn!("Failed to find prefix to remove from FIB: {}", nlri);
         }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        net::{IpAddr, Ipv6Addr},
+        str::FromStr,
+    };
+
+    use bgp_packet::nlri::NLRI;
+    use eyre::{eyre, Result};
+    use ip_network_table_deps_treebitmap::IpLookupTable;
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+    use crate::southbound_interface::DummyVerifier;
+
+    use super::FibState;
+
+    #[tokio::test]
+    async fn test_double_add() -> Result<()> {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer())
+            .with(EnvFilter::from_default_env())
+            .init();
+
+        let southbound = DummyVerifier::default();
+        let mut fib_state: FibState<Ipv6Addr, DummyVerifier> = FibState {
+            fib: IpLookupTable::default(),
+            southbound,
+            af: bgp_packet::constants::AddressFamilyIdentifier::Ipv6,
+        };
+
+        let nlri = NLRI::try_from("2602:feda:b8d::/48").map_err(|e| eyre!(e))?;
+        let nexthop = IpAddr::V6(Ipv6Addr::from_str("2001:db8:cafe::1")?);
+
+        fib_state
+            .route_add(&nlri, nexthop)
+            .await
+            .map_err(|e| eyre!(e))?;
+
+        let nexthop_2 = IpAddr::V6(Ipv6Addr::from_str("2001:db8:babe::1")?);
+
+        fib_state
+            .route_add(&nlri, nexthop_2)
+            .await
+            .map_err(|e| eyre!(e))?;
 
         Ok(())
     }

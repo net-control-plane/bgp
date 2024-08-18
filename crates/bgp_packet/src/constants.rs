@@ -21,7 +21,7 @@ use super::traits::{BGPParserError, ParserContext, ReadablePacket};
 
 // Address Family Identifiers as per
 // https://www.iana.org/assignments/address-family-numbers/address-family-numbers.xhtml
-#[derive(Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize, Hash)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize, Hash, clap::ValueEnum)]
 pub enum AddressFamilyIdentifier {
     Ipv4,
     Ipv6,

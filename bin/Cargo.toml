@@ -8,6 +8,7 @@ rust-version.workspace = true
 version.workspace      = true
 
 [dependencies]
+bgp_packet.workspace         = true
 bgp_server.workspace         = true
 clap.workspace               = true
 eyre.workspace               = true

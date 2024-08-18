@@ -1,3 +1,4 @@
+use bgp_packet::constants::AddressFamilyIdentifier;
 use clap::{Parser, Subcommand};
 use eyre::{bail, Result};
 use route_client::southbound_interface::{DummyVerifier, SouthboundInterface};
@@ -21,6 +22,8 @@ struct Cli {
     route_server: String,
     #[clap(subcommand)]
     command: Option<Commands>,
+    #[clap(long = "af")]
+    address_family: Vec<AddressFamilyIdentifier>,
 }
 
 #[derive(Subcommand)]
