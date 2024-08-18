@@ -18,6 +18,7 @@ use crate::traits::ParserContext;
 use crate::traits::ReadablePacket;
 use crate::traits::WritablePacket;
 
+use eyre::{bail, eyre};
 use nom::bytes::complete::take;
 use nom::number::complete::be_u8;
 use nom::Err::Failure;
@@ -121,14 +122,17 @@ impl<'de> Deserialize<'de> for NLRI {
 }
 
 impl TryFrom<NLRI> for Ipv6Addr {
-    type Error = String;
+    type Error = eyre::ErrReport;
 
     fn try_from(value: NLRI) -> Result<Self, Self::Error> {
         match value.afi {
             AddressFamilyIdentifier::Ipv6 => {
                 let mut v: [u8; 16] = [0u8; 16];
                 if value.prefix.len() > v.len() {
-                    return Err("prefix length greater than IPv6 address length".to_string());
+                    bail!(
+                        "prefix length {} greater than IPv6 address length 16",
+                        value.prefix.len()
+                    );
                 }
                 for (pos, e) in value.prefix.iter().enumerate() {
                     v[pos] = *e;
@@ -136,20 +140,23 @@ impl TryFrom<NLRI> for Ipv6Addr {
                 let ip6: Ipv6Addr = v.into();
                 Ok(ip6)
             }
-            _ => Err("Unsupported AFI type".to_string()),
+            other => bail!("Unsupported AddressFamily type {}", other),
         }
     }
 }
 
 impl TryFrom<NLRI> for Ipv4Addr {
-    type Error = String;
+    type Error = eyre::Report;
 
     fn try_from(value: NLRI) -> Result<Self, Self::Error> {
         match value.afi {
             AddressFamilyIdentifier::Ipv4 => {
                 let mut v: [u8; 4] = [0u8; 4];
                 if value.prefix.len() > v.len() {
-                    return Err("prefix length greater than IPv4 address length".to_string());
+                    bail!(
+                        "prefix length {} greater than IPv4 address length 4",
+                        value.prefix.len()
+                    );
                 }
                 for (pos, e) in value.prefix.iter().enumerate() {
                     v[pos] = *e;
@@ -157,22 +164,22 @@ impl TryFrom<NLRI> for Ipv4Addr {
                 let ip4 = Ipv4Addr::new(v[0], v[1], v[2], v[3]);
                 Ok(ip4)
             }
-            _ => Err("Unsupported AFI type".to_string()),
+            other => bail!("Unsupported AddressFamily type: {}", other),
         }
     }
 }
 
 impl TryInto<IpAddr> for NLRI {
-    type Error = std::io::Error;
+    type Error = eyre::ErrReport;
     fn try_into(self) -> Result<IpAddr, Self::Error> {
         match self.afi {
             AddressFamilyIdentifier::Ipv4 => {
                 let mut v: [u8; 4] = [0u8; 4];
                 if self.prefix.len() > v.len() {
-                    return Err(std::io::Error::new(
-                        ErrorKind::InvalidData,
-                        "prefix length greater than IPv4 address length",
-                    ));
+                    bail!(
+                        "prefix length {} greater than IPv4 address length 4",
+                        self.prefix.len()
+                    );
                 }
                 for (pos, e) in self.prefix.iter().enumerate() {
                     v[pos] = *e;
@@ -183,10 +190,10 @@ impl TryInto<IpAddr> for NLRI {
             AddressFamilyIdentifier::Ipv6 => {
                 let mut v: [u8; 16] = [0u8; 16];
                 if self.prefix.len() > v.len() {
-                    return Err(std::io::Error::new(
-                        ErrorKind::InvalidData,
-                        "prefix length greater than IPv6 address length",
-                    ));
+                    bail!(
+                        "prefix length {} greater than IPv6 address length 16",
+                        self.prefix.len()
+                    );
                 }
                 for (pos, e) in self.prefix.iter().enumerate() {
                     v[pos] = *e;
@@ -199,27 +206,28 @@ impl TryInto<IpAddr> for NLRI {
 }
 
 impl TryFrom<&str> for NLRI {
-    type Error = String;
+    type Error = eyre::Report;
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let parts: Vec<&str> = value.split("/").collect();
         if parts.len() != 2 {
-            return Err(format!("Expected ip_addr/prefixlen but got: {}", value));
+            bail!("Expected ip_addr/prefixlen but got: {}", value);
         }
 
-        let prefixlen: u8 = u8::from_str(parts[1]).map_err(|_| "failed to parse prefixlen")?;
+        let prefixlen: u8 =
+            u8::from_str(parts[1]).map_err(|_| eyre!("failed to parse prefixlen"))?;
         let mut octets: Vec<u8>;
         let afi: AddressFamilyIdentifier;
 
         if parts[0].contains(":") {
             afi = AddressFamilyIdentifier::Ipv6;
-            let addr: Ipv6Addr = Ipv6Addr::from_str(parts[0]).map_err(|e| e.to_string())?;
+            let addr: Ipv6Addr = Ipv6Addr::from_str(parts[0]).map_err(|e| eyre!(e))?;
             octets = addr.octets().to_vec();
         } else if parts[0].contains(".") {
             afi = AddressFamilyIdentifier::Ipv4;
-            let addr: Ipv4Addr = Ipv4Addr::from_str(parts[0]).map_err(|e| e.to_string())?;
+            let addr: Ipv4Addr = Ipv4Addr::from_str(parts[0]).map_err(|e| eyre!(e))?;
             octets = addr.octets().to_vec();
         } else {
-            return Err(format!("Could not detect IP address type: {}", parts[0]));
+            bail!("Could not detect IP address type: {}", parts[0]);
         }
 
         // Truncate octets to prefixlen

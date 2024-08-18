@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use bgp_packet::{constants::AddressFamilyIdentifier, nlri::NLRI};
-use eyre::{eyre, Result};
+use eyre::Result;
 use futures::TryStreamExt;
 use netlink_packet_route::route::RouteAddress;
 use netlink_packet_route::route::RouteAttribute;
@@ -111,12 +111,8 @@ impl SouthboundInterface for NetlinkConnector {
     async fn route_del(&mut self, prefix: NLRI, nexthop: IpAddr) -> Result<()> {
         let rt_handle = self.handle.route();
         let destination = match prefix.afi {
-            AddressFamilyIdentifier::Ipv4 => {
-                RouteAddress::Inet(prefix.clone().try_into().map_err(|e: String| eyre!(e))?)
-            }
-            AddressFamilyIdentifier::Ipv6 => {
-                RouteAddress::Inet6(prefix.clone().try_into().map_err(|e: String| eyre!(e))?)
-            }
+            AddressFamilyIdentifier::Ipv4 => RouteAddress::Inet(prefix.clone().try_into()?),
+            AddressFamilyIdentifier::Ipv6 => RouteAddress::Inet6(prefix.clone().try_into()?),
         };
         let nexthop = match nexthop {
             IpAddr::V4(ipv4) => RouteAddress::Inet(ipv4),

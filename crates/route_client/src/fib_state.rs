@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use eyre::Result;
+use eyre::{bail, Result};
 use ip_network_table_deps_treebitmap::address::Address;
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use std::convert::{TryFrom, TryInto};
@@ -79,7 +79,7 @@ impl<
         S: SouthboundInterface,
     > FibState<A, S>
 where
-    String: From<<A as TryFrom<NLRI>>::Error>,
+    eyre::ErrReport: From<<A as TryFrom<NLRI>>::Error>,
 {
     pub async fn get_routing_table(&mut self) -> Result<()> {
         todo!();
@@ -87,7 +87,7 @@ where
 
     /// route_add requests updating the nexthop to a particular path if it is not already
     /// the best path.
-    pub async fn route_add(&mut self, nlri: &NLRI, nexthop: IpAddr) -> Result<(), String> {
+    pub async fn route_add(&mut self, nlri: &NLRI, nexthop: IpAddr) -> Result<()> {
         info!(af = ?self.af, %nlri, %nexthop);
         // Lookup the path in the Fib, there are three possible outcomes:
         // 1. The route is not yet known, we add it to the FibState and inject it into the kernel,
@@ -112,7 +112,7 @@ where
                                 "Southbound interface returned error when trying to remove route: {} via {}, error: {}",
                                 nlri, entry.nexthop, e
                             );
-                        return Err("Netlink remove error".to_string());
+                        bail!("Failed to delete route in update: {}", e);
                     }
 
                     // Add new route
@@ -130,7 +130,7 @@ where
                             "Netlink returned error when trying to add route: {} via {}, error: {}",
                             nlri, nexthop, e
                         );
-                        return Err("Netlink add error".to_string());
+                        bail!("Failed to add route to netlink in update: {}", e);
                     }
 
                     entry.nexthop = nexthop;
@@ -151,7 +151,7 @@ where
                         "Netlink returned error when trying to add route: {} via {}, error: {}",
                         nlri, nexthop, e
                     );
-                    return Err("Netlink add error".to_string());
+                    bail!("Failed to add new route: {}", e);
                 }
 
                 let addr: A = nlri.clone().try_into()?;
@@ -164,22 +164,24 @@ where
     }
 
     /// route_del removes a route from the FibState and kernel.
-    pub async fn route_del(&mut self, nlri: NLRI) -> Result<(), String> {
+    pub async fn route_del(&mut self, nlri: NLRI) -> Result<()> {
         let prefix_addr: A = nlri.clone().try_into()?;
         if let Some(entry_wrapped) = self.fib.exact_match(prefix_addr, nlri.prefixlen.into()) {
             {
                 let entry = entry_wrapped.lock().await;
                 info!(%nlri, %prefix_addr, %entry.nexthop, "route_del");
                 if let Err(e) = self.southbound.route_del(nlri.clone(), entry.nexthop).await {
-                    warn!(
+                    bail!(
                         "Failed to apply route mutation to remove NLRI: {}, error: {}",
-                        nlri, e
+                        nlri,
+                        e
                     );
                 }
             }
             self.fib.remove(prefix_addr, nlri.prefixlen.into());
+            info!(%nlri, "Successfully removed route from kernel");
         } else {
-            warn!("Failed to find prefix to remove from FIB: {}", nlri);
+            bail!("Failed to find prefix to remove from FIB: {}", nlri);
         }
 
         Ok(())
