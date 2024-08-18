@@ -23,11 +23,11 @@ use std::net::Ipv6Addr;
 use std::str::FromStr;
 use std::time::Duration;
 
-use eyre::Result;
+use eyre::{bail, Result};
 use ip_network_table_deps_treebitmap::IpLookupTable;
 use tonic::transport::Endpoint;
 use tonic::transport::Uri;
-use tracing::{trace, warn};
+use tracing::trace;
 
 use bgp_packet::constants::AddressFamilyIdentifier;
 use bgp_packet::nlri::NLRI;
@@ -99,13 +99,13 @@ pub async fn run_connector_v4<S: SouthboundInterface>(
                     let nh_bytes: [u8; 4] = vec_to_array(best.nexthop.clone())?;
                     let nh_addr: Ipv4Addr = Ipv4Addr::from(nh_bytes);
                     if let Err(e) = fib_state.route_add(&nlri, IpAddr::V4(nh_addr)).await {
-                        warn!("Failed to add route into kernel: {}: {}", nlri, e);
+                        bail!("Failed to add route into kernel: {}: {}", nlri, e);
                     }
                 }
             } else {
                 // No more paths, delete
                 if let Err(e) = fib_state.route_del(nlri).await {
-                    warn!("Failed to delete route from kernel: {}", e);
+                    bail!("Failed to delete route from kernel: {}", e);
                 }
             }
         }
@@ -166,13 +166,13 @@ pub async fn run_connector_v6<S: SouthboundInterface>(
                     let nh_bytes: [u8; 16] = vec_to_array(best.nexthop.clone())?;
                     let nh_addr: Ipv6Addr = Ipv6Addr::from(nh_bytes);
                     if let Err(e) = fib_state.route_add(&nlri, IpAddr::V6(nh_addr)).await {
-                        warn!("Failed to add route into kernel: {}: {}", nlri, e);
+                        bail!("Failed to add route into kernel: {}: {}", nlri, e);
                     }
                 }
             } else {
                 // No more paths, delete
                 if let Err(e) = fib_state.route_del(nlri).await {
-                    warn!("Failed to delete route from kernel: {}", e);
+                    bail!("Failed to delete route from kernel: {}", e);
                 }
             }
         }
