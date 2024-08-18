@@ -185,33 +185,6 @@ async fn start_http_server(
         Ok(warp::http::Response::builder().body(result).into_response())
     }
 
-    /*
-        async fn modify_community_fn(
-            add: bool,
-            peers: HashMap<String, UnboundedSender<PeerCommands>>,
-            name: String,
-            ld1: u32,
-            ld2: u32,
-        ) -> Result<impl warp::Reply, warp::Rejection> {
-            if let Some(chan) = peers.get(&name) {
-                if let Err(e) = func(chan.clone(), ld1, ld2).await {
-                    warn!("Failed to add large community: {:?}", e);
-                    return Err(warp::reject());
-                }
-            } else {
-                return Err(warp::reject());
-            }
-            Ok(warp::reply::with_status("Ok", warp::http::StatusCode::OK))
-        }
-
-        let add_community_filter = warp::post()
-            .map(move || true)
-            .and(warp::path::param())
-            .and(warp::path!(u32 / u32))
-            .and_then(modify_community_fn);
-
-    */
-
     // Start the web server that has access to the rib managers so that it can expose the state.
     let v4_mgr_filter = warp::any().map(move || manager4.clone());
 

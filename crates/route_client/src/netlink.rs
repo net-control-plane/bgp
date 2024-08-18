@@ -6,7 +6,6 @@ use netlink_packet_route::route::RouteAddress;
 use netlink_packet_route::route::RouteAttribute;
 use netlink_packet_route::route::RouteHeader;
 use netlink_packet_route::route::RouteMessage;
-use netlink_packet_route::route::RouteProtocol;
 use netlink_packet_route::route::RouteType;
 use netlink_packet_route::AddressFamily as NetlinkAddressFamily;
 use rtnetlink::IpVersion;

@@ -28,7 +28,6 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
-use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 
@@ -283,7 +282,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use super::NLRI;
-    use crate::constants::AddressFamilyIdentifier::{Ipv4, Ipv6};
+    use crate::constants::AddressFamilyIdentifier::{self, Ipv4, Ipv6};
     use crate::traits::ParserContext;
     use crate::traits::ReadablePacket;
     use crate::traits::WritablePacket;
@@ -373,17 +372,4 @@ mod tests {
             assert_eq!(reparsed, parsed_nlri);
         }
     }
-
-    // #[test]
-    // fn test_to_string_invalids() {
-    //     let invalid_v4 = NLRI {
-    //         afi: AddressFamilyIdentifier::Ipv4,
-    //         prefix: vec![1, 2, 3, 4, 5],
-    //         prefixlen: 16,
-    //     };
-    //     assert_eq!(
-    //         "a formatting trait implementation returned an error: Error",
-    //         format!("{}", invalid_v4)
-    //     );
-    // }
 }

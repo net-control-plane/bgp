@@ -110,21 +110,31 @@ impl RouteServer {
 impl BgpServerAdminService for RouteServer {
     async fn peer_status(
         &self,
-        request: tonic::Request<PeerStatusRequest>,
+        _request: tonic::Request<PeerStatusRequest>,
     ) -> Result<Response<PeerStatusResponse>, Status> {
         let mut result = PeerStatusResponse::default();
 
+        // Store the pending futures in a JoinSet to parallelize fetching.
+        let mut join_set = tokio::task::JoinSet::new();
+
         for peer in &self.peer_state_machines {
             let (tx, rx) = oneshot::channel();
-            if let Err(e) = peer.1.send(PeerCommands::GetStatus(tx)) {
+            if let Err(_e) = peer.1.send(PeerCommands::GetStatus(tx)) {
                 warn!(
                     peer = peer.0,
-                    "Peer channel dead when trying to send state request"
+                    "Failed to send GetStatus request to PeerStateMachine"
                 );
                 continue;
             }
-            let resp = rx.await.map_err(|e| Status::internal(format!("{}", e)))?;
-            result.peer_status.push(resp);
+            join_set.spawn(rx);
+        }
+
+        while let Some(next) = join_set.join_next().await {
+            match next {
+                Ok(Ok(peer_status)) => result.peer_status.push(peer_status),
+                Ok(Err(e)) => return Err(Status::internal(format!("{}", e))),
+                Err(e) => return Err(Status::internal(format!("{}", e))),
+            }
         }
 
         Ok(Response::new(result))

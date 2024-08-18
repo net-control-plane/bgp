@@ -213,9 +213,8 @@ where
         for pathset in self.rib.iter() {
             snapshot.routes.push(pathset.2.lock().unwrap().clone());
         }
-        // TODO: handle an error here.
         if let Err(e) = sender.send(snapshot) {
-            warn!("Failed to send snapshot of RIB: {:?}", e);
+            trace!("Failed to send snapshot of RIB: {:?}", e);
         }
         info!("Done RIB dump");
     }
