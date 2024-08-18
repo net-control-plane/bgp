@@ -113,7 +113,6 @@ impl SouthboundInterface for NetlinkConnector {
             },
             destination_prefix_length: prefix.prefixlen,
             table: self.table.unwrap_or(0) as u8,
-            protocol: RouteProtocol::Bgp,
             kind: RouteType::Unicast,
             ..Default::default()
         };
