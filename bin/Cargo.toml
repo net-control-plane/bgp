@@ -29,3 +29,7 @@ path = "src/bgp_server/main.rs"
 [[bin]]
 name = "client"
 path = "src/client/main.rs"
+
+[[bin]]
+name = "util"
+path = "src/util/main.rs"

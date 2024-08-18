@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use bgp_packet::{constants::AddressFamilyIdentifier, nlri::NLRI};
-use eyre::Result;
+use eyre::{bail, Result};
 use futures::TryStreamExt;
 use netlink_packet_route::route::RouteAddress;
 use netlink_packet_route::route::RouteAttribute;
@@ -10,8 +10,8 @@ use netlink_packet_route::route::RouteProtocol;
 use netlink_packet_route::route::RouteType;
 use netlink_packet_route::AddressFamily as NetlinkAddressFamily;
 use rtnetlink::IpVersion;
+use std::convert::TryInto;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::{convert::TryInto, io::ErrorKind};
 
 use super::southbound_interface::SouthboundInterface;
 
@@ -50,19 +50,13 @@ impl SouthboundInterface for NetlinkConnector {
                 let addr: Ipv6Addr = match prefix.try_into()? {
                     IpAddr::V6(addr) => addr,
                     _ => {
-                        return Err(eyre::Error::from(std::io::Error::new(
-                            ErrorKind::InvalidInput,
-                            "Got non-IPv6 address from NLRI",
-                        )))
+                        bail!("Got non IPv6 address from NLRI")
                     }
                 };
                 let gw_addr: Ipv6Addr = match nexthop.clone().try_into()? {
                     IpAddr::V6(addr) => addr,
                     _ => {
-                        return Err(eyre::Error::from(std::io::Error::new(
-                            ErrorKind::InvalidInput,
-                            "Got non-IPv6 gateway for IPv6 NLRI",
-                        )))
+                        bail!("Got non IPv6 address from nexthop");
                     }
                 };
                 let mut mutation = route
@@ -80,19 +74,13 @@ impl SouthboundInterface for NetlinkConnector {
                 let addr: Ipv4Addr = match prefix.clone().try_into()? {
                     IpAddr::V4(addr) => addr,
                     _ => {
-                        return Err(eyre::Error::from(std::io::Error::new(
-                            ErrorKind::InvalidInput,
-                            "Got non-IPv4 address from NLRI",
-                        )))
+                        bail!("Got non-IPv4 address from NLRI")
                     }
                 };
                 let gw_addr = match nexthop.clone().try_into()? {
                     IpAddr::V4(addr) => addr,
                     _ => {
-                        return Err(eyre::Error::from(std::io::Error::new(
-                            ErrorKind::InvalidInput,
-                            "Got non-IPv4 gateway for IPv4 NLRI",
-                        )))
+                        bail!("Got non IPv4 address from nexthop");
                     }
                 };
                 let mut mutation = route
