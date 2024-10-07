@@ -449,7 +449,7 @@ impl Display for OpenMessage {
 }
 
 /// UPDATE message and subtypes.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct UpdateMessage {
     pub withdrawn_nlri: Vec<NLRI>,
     pub path_attributes: Vec<PathAttribute>,

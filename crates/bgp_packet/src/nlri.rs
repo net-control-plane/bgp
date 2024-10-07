@@ -205,7 +205,7 @@ impl TryInto<IpAddr> for NLRI {
 }
 
 impl TryFrom<&str> for NLRI {
-    type Error = eyre::Report;
+    type Error = eyre::ErrReport;
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let parts: Vec<&str> = value.split("/").collect();
         if parts.len() != 2 {
