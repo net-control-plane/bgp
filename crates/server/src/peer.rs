@@ -1288,13 +1288,6 @@ where
     async fn handle_established_msg(&mut self, msg: BGPSubmessage) -> Result<()> {
         match msg {
             BGPSubmessage::UpdateMessage(u) => {
-                if !self.decide_accept_message(&u.path_attributes) {
-                    info!(
-                        "Rejected message due to path attributes: {:?}",
-                        u.path_attributes
-                    );
-                }
-
                 // Have a seperate path for calling Multiprotocol NLRI processing.
                 for attr in &u.path_attributes {
                     match attr {
