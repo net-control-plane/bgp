@@ -20,6 +20,8 @@ use crate::rib_manager::RouteManagerCommands;
 use crate::route_server::route_server::bgp_server_admin_service_server::BgpServerAdminService;
 use crate::route_server::route_server::route_service_server::RouteService;
 use crate::route_server::route_server::AddressFamily;
+use crate::route_server::route_server::AnnouncementRequest;
+use crate::route_server::route_server::AnnouncementResponse;
 use crate::route_server::route_server::DumpPathsRequest;
 use crate::route_server::route_server::DumpPathsResponse;
 use crate::route_server::route_server::Path;
@@ -40,7 +42,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Response;
 use tonic::Status;
-use tracing::warn;
+use tracing::{info, warn};
 
 pub mod route_server {
     tonic::include_proto!("bgpd.grpc");
@@ -138,6 +140,26 @@ impl BgpServerAdminService for RouteServer {
         }
 
         Ok(Response::new(result))
+    }
+
+    async fn announce_to_peer(
+        &self,
+        request: tonic::Request<AnnouncementRequest>,
+    ) -> Result<tonic::Response<AnnouncementResponse>, Status> {
+        info!("Processing announce_to_peer: {:?}", request);
+
+        let request = request.get_ref();
+
+        if let Some(peer) = self.peer_state_machines.get(&request.peer_name) {
+            info!("Would make announcement to peer: {}", &request.peer_name);
+        } else {
+            return Err(Status::invalid_argument(format!(
+                "No such peer: {}",
+                &request.peer_name,
+            )));
+        }
+
+        Ok(Response::new(AnnouncementResponse::default()))
     }
 }
 
