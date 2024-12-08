@@ -81,6 +81,8 @@ message AnnouncementRequest {
   string peer_name = 1;
   Prefix prefix = 2;
   repeated string large_communities = 3;
+  // When set to true inserts the route, when set to false withdraws the route.
+  bool add = 4;
 }
 
 message AnnouncementResponse {}

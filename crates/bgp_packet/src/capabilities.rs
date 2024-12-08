@@ -23,6 +23,7 @@ use nom::number::complete::{be_u16, be_u8};
 use nom::Err::Failure;
 use nom::IResult;
 use std::fmt;
+use std::fmt::Display;
 
 /// BGPOpenOptionType represents the option types in the Open message.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, Hash)]
@@ -34,9 +35,9 @@ impl BGPOpenOptionType {
     }
 }
 
-impl Into<u8> for BGPOpenOptionType {
-    fn into(self) -> u8 {
-        self.0
+impl From<BGPOpenOptionType> for u8 {
+    fn from(val: BGPOpenOptionType) -> Self {
+        val.0
     }
 }
 
@@ -95,14 +96,12 @@ impl WritablePacket for OpenOption {
     }
     fn wire_len(&self, ctx: &ParserContext) -> Result<u16, &'static str> {
         match &self.oval {
-            OpenOptions::Capabilities(c) => {
-                return Ok(2 + c.wire_len(ctx)?);
-            }
+            OpenOptions::Capabilities(c) => Ok(2 + c.wire_len(ctx)?),
         }
     }
 }
 
-impl fmt::Display for OpenOption {
+impl Display for OpenOption {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "OpenOption: {}", self.oval)
     }
@@ -113,11 +112,11 @@ pub enum OpenOptions {
     Capabilities(OpenOptionCapabilities),
 }
 
-impl fmt::Display for OpenOptions {
+impl Display for OpenOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        return match &self {
+        match &self {
             OpenOptions::Capabilities(c) => write!(f, "Capabilities: {}", c),
-        };
+        }
     }
 }
 
@@ -137,7 +136,7 @@ impl ReadablePacket for OpenOptionCapabilities {
             be_u8,
             nom::multi::many0(|i| BGPCapability::from_wire(ctx, i)),
         )(buf)?;
-        return IResult::Ok((buf, OpenOptionCapabilities { caps }));
+        IResult::Ok((buf, OpenOptionCapabilities { caps }))
     }
 }
 
@@ -161,7 +160,7 @@ impl WritablePacket for OpenOptionCapabilities {
     }
 }
 
-impl fmt::Display for OpenOptionCapabilities {
+impl Display for OpenOptionCapabilities {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Capabilities: [")?;
         for cap in &self.caps {
@@ -181,9 +180,9 @@ impl BGPCapabilityType {
     }
 }
 
-impl Into<u8> for BGPCapabilityType {
-    fn into(self) -> u8 {
-        return self.0;
+impl From<BGPCapabilityType> for u8 {
+    fn from(val: BGPCapabilityType) -> Self {
+        val.0
     }
 }
 
@@ -306,17 +305,17 @@ impl WritablePacket for BGPCapability {
     }
     fn wire_len(&self, ctx: &ParserContext) -> Result<u16, &'static str> {
         // BGPCapabilityType(u8) + cap_len(u8) + val
-        return match &self.val {
+        match &self.val {
             BGPCapabilityValue::FourByteASN(v) => Ok(2 + v.wire_len(ctx)?),
             BGPCapabilityValue::Multiprotocol(v) => Ok(2 + v.wire_len(ctx)?),
             BGPCapabilityValue::RouteRefresh(v) => Ok(2 + v.wire_len(ctx)?),
             BGPCapabilityValue::GracefulRestart(v) => Ok(2 + v.wire_len(ctx)?),
             BGPCapabilityValue::UnknownCapability(v) => Ok(2 + v.wire_len(ctx)?),
-        };
+        }
     }
 }
 
-impl fmt::Display for BGPCapability {
+impl Display for BGPCapability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         std::fmt::Display::fmt(&self.val, f)
     }
@@ -331,7 +330,7 @@ pub enum BGPCapabilityValue {
     UnknownCapability(UnknownCapability),
 }
 
-impl fmt::Display for BGPCapabilityValue {
+impl Display for BGPCapabilityValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             BGPCapabilityValue::FourByteASN(v) => std::fmt::Display::fmt(v, f),
@@ -379,7 +378,7 @@ impl WritablePacket for UnknownCapability {
     }
 }
 
-impl fmt::Display for UnknownCapability {
+impl Display for UnknownCapability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "UnknownCapability type: {}", self.cap_code)
     }
@@ -403,7 +402,7 @@ impl ReadablePacket for FourByteASNCapability {
         buf: &'a [u8],
     ) -> IResult<&'a [u8], Self, BGPParserError<&'a [u8]>> {
         let (buf, asn) = nom::combinator::complete(nom::number::complete::be_u32)(buf)?;
-        return IResult::Ok((buf, FourByteASNCapability::new(asn)));
+        IResult::Ok((buf, FourByteASNCapability::new(asn)))
     }
 }
 
@@ -418,7 +417,7 @@ impl WritablePacket for FourByteASNCapability {
     }
 }
 
-impl fmt::Display for FourByteASNCapability {
+impl Display for FourByteASNCapability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FourByteASN: asn: {}", self.asn)
     }
@@ -445,16 +444,11 @@ impl ReadablePacket for MultiprotocolCapability {
         ctx: &ParserContext,
         buf: &'a [u8],
     ) -> IResult<&'a [u8], MultiprotocolCapability, BGPParserError<&'a [u8]>> {
-        let (buf, (afi_raw, _, safi_raw)) = nom::combinator::complete(nom::sequence::tuple((
+        let (buf, (afi, _, safi)) = nom::combinator::complete(nom::sequence::tuple((
             |i| AddressFamilyIdentifier::from_wire(ctx, i),
             nom::bytes::complete::take(1u8),
             |i| SubsequentAddressFamilyIdentifier::from_wire(ctx, i),
         )))(buf)?;
-
-        let afi = AddressFamilyIdentifier::try_from(afi_raw)
-            .map_err(|e| nom::Err::Error(BGPParserError::CustomText(e.to_string())))?;
-        let safi = SubsequentAddressFamilyIdentifier::try_from(safi_raw)
-            .map_err(|e| nom::Err::Error(BGPParserError::CustomText(e.to_string())))?;
 
         IResult::Ok((buf, MultiprotocolCapability::new(afi, safi)))
     }
@@ -473,7 +467,7 @@ impl WritablePacket for MultiprotocolCapability {
     }
 }
 
-impl fmt::Display for MultiprotocolCapability {
+impl Display for MultiprotocolCapability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "MultiprotocolCapbility: [ {} {} ]", self.afi, self.safi,)
     }
@@ -501,7 +495,7 @@ impl ReadablePacket for RouteRefreshCapability {
     }
 }
 
-impl fmt::Display for RouteRefreshCapability {
+impl Display for RouteRefreshCapability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "RouteRefreshCapability")
     }
@@ -548,7 +542,7 @@ impl WritablePacket for GracefulRestartPayload {
     fn to_wire(&self, _: &ParserContext) -> Result<Vec<u8>, &'static str> {
         let afi: u16 = self.afi.into();
         let mut res = vec![0u8; 2];
-        byteorder::NetworkEndian::write_u16(res.as_mut(), afi.into());
+        byteorder::NetworkEndian::write_u16(res.as_mut(), afi);
         res.push(self.safi.into());
         res.push(if self.af_flags { 0x80 } else { 0 });
         Ok(res)
@@ -558,7 +552,7 @@ impl WritablePacket for GracefulRestartPayload {
     }
 }
 
-impl fmt::Display for GracefulRestartPayload {
+impl Display for GracefulRestartPayload {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -604,7 +598,7 @@ impl WritablePacket for GracefulRestartCapability {
     }
 }
 
-impl fmt::Display for GracefulRestartCapability {
+impl Display for GracefulRestartCapability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "GracefulRestartCapability: [")?;
         for value in &self.payloads {
@@ -630,14 +624,13 @@ impl WritablePacket for ExtendedNextHopEncodingCapability {
         Ok(self
             .afi_safi_nhafi
             .iter()
-            .map(|e| {
+            .flat_map(|e| {
                 Into::<Vec<u8>>::into(e.0)
                     .into_iter()
-                    .chain(vec![0x00, Into::<u8>::into(e.1)].into_iter())
-                    .chain(Into::<Vec<u8>>::into(e.2).into_iter())
+                    .chain(vec![0x00, Into::<u8>::into(e.1)])
+                    .chain(Into::<Vec<u8>>::into(e.2))
                     .collect::<Vec<u8>>()
             })
-            .flatten()
             .collect::<Vec<u8>>())
     }
 
@@ -672,7 +665,7 @@ impl ReadablePacket for ExtendedNextHopEncodingCapability {
     }
 }
 
-impl fmt::Display for ExtendedNextHopEncodingCapability {
+impl Display for ExtendedNextHopEncodingCapability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ExtendednextHopEncodingCapability [")?;
         for entry in &self.afi_safi_nhafi {
@@ -698,7 +691,9 @@ mod tests {
     #[test]
     fn test_four_byte_asn_capability() {
         let bytes: &[u8] = &[0x41, 0x04, 0x00, 0x00, 0x00, 0x2a];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let (buf, result) = BGPCapability::from_wire(ctx, bytes).unwrap();
         assert_eq!(
             result,
@@ -716,7 +711,9 @@ mod tests {
             0x02, 0x06, 0x01, 0x04, 0x00, 0x01, 0x00, 0x01, 0x02, 0x02, 0x80, 0x00, 0x02, 0x02,
             0x02, 0x00, 0x02, 0x02, 0x46, 0x00, 0x02, 0x06, 0x41, 0x04, 0x00, 0x00, 0x00, 0x2a,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let (_buf, result) =
             nom::multi::many0(|buf: &'a [u8]| OpenOption::from_wire(ctx, buf))(option_bytes)
                 .unwrap();
@@ -728,7 +725,9 @@ mod tests {
     #[test]
     fn test_extended_next_hop_encoding_capability() {
         let bytes: Vec<u8> = vec![0x00, 0x01, 0x00, 0x01, 0x00, 0x02];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let (_, cap) = ExtendedNextHopEncodingCapability::from_wire(ctx, &bytes).unwrap();
 
         let expected_str =

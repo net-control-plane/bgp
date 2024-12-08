@@ -472,10 +472,10 @@ impl ReadablePacket for NextHopPathAttribute {
 
 impl WritablePacket for NextHopPathAttribute {
     fn to_wire(&self, _: &ParserContext) -> Result<Vec<u8>, &'static str> {
-        return Ok(self.0.octets().to_vec());
+        Ok(self.0.octets().to_vec())
     }
     fn wire_len(&self, _: &ParserContext) -> Result<u16, &'static str> {
-        return Ok(4);
+        Ok(4)
     }
 }
 
@@ -584,7 +584,7 @@ impl ReadablePacket for AggregatorPathAttribute {
         ctx: &ParserContext,
         buf: &'a [u8],
     ) -> IResult<&'a [u8], Self, BGPParserError<&'a [u8]>> {
-        if !ctx.four_octet_asn.is_some() {
+        if ctx.four_octet_asn.is_none() {
             return Err(Failure(BGPParserError::CustomText(
                 "Non four byte ASN not supported (AggregatorPathAttribute from_wire)".to_string(),
             )));
@@ -604,7 +604,8 @@ impl ReadablePacket for AggregatorPathAttribute {
 
 impl WritablePacket for AggregatorPathAttribute {
     fn to_wire(&self, ctx: &ParserContext) -> Result<Vec<u8>, &'static str> {
-        if !ctx.four_octet_asn.is_some() {
+        if ctx.four_octet_asn.is_none() {
+            // TODO: This should be gracefully handled, not panic!
             panic!("Non four byte ASN not supported (AggregatorPathAttribute from_wire)");
         }
         let mut buf: Vec<u8> = vec![0u8; 4];
@@ -613,7 +614,8 @@ impl WritablePacket for AggregatorPathAttribute {
         Ok(buf)
     }
     fn wire_len(&self, ctx: &ParserContext) -> Result<u16, &'static str> {
-        if !ctx.four_octet_asn.is_some() {
+        if ctx.four_octet_asn.is_none() {
+            // TODO: This should be gracefully handled, not panic!
             panic!("Non four byte ASN not supported (AggregatorPathAttribute from_wire)");
         }
         Ok(8)
@@ -733,7 +735,7 @@ impl WritablePacket for ExtendedCommunitiesPathAttribute {
         if !self.value.len() == 7 {
             return Err("ExtendedCommunitiesPathAttribute value length != 7");
         }
-        Ok(vec![vec![self.t_high], self.value.to_owned()].concat())
+        Ok([vec![self.t_high], self.value.to_owned()].concat())
     }
     fn wire_len(&self, _: &ParserContext) -> Result<u16, &'static str> {
         Ok(8)
@@ -847,7 +849,7 @@ impl MPReachNLRIPathAttribute {
     // https://datatracker.ietf.org/doc/html/rfc2545 describes what the nexthop
     // field can contain. Returns a tuple of (global_nh, linklocal_nh)
     pub fn nexthop_to_v6(self) -> Option<(Ipv6Addr, Option<Ipv6Addr>)> {
-        return match self.nexthop.len() {
+        match self.nexthop.len() {
             16 => {
                 let nh_bytes: [u8; 16] = self.nexthop.try_into().unwrap();
                 Some((Ipv6Addr::from(nh_bytes), None))
@@ -861,7 +863,7 @@ impl MPReachNLRIPathAttribute {
                 ))
             }
             _ => None,
-        };
+        }
     }
 }
 
@@ -1010,7 +1012,9 @@ mod tests {
             0x02, 0x04, 0x00, 0x00, 0x9a, 0x74, 0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x20, 0x1a,
             0x00, 0x00, 0x78, 0xfc,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result = &ASPathAttribute::from_wire(ctx, as_path_bytes).unwrap();
 
         let expected_aspath: Vec<u32> = vec![39540, 57118, 8218, 30972];
@@ -1029,7 +1033,9 @@ mod tests {
             0x02, 0x04, 0x00, 0x00, 0x9a, 0x74, 0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x20, 0x1a,
             0x00, 0x00, 0x78, 0xfc, 0x01, 0x02, 0x00, 0x00, 0x9a, 0x74, 0x00, 0x00, 0xdf, 0x1e,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result = &ASPathAttribute::from_wire(ctx, as_path_bytes).unwrap();
 
         let expected_aspath: Vec<u32> = vec![39540, 57118, 8218, 30972];
@@ -1048,7 +1054,9 @@ mod tests {
     #[test]
     fn test_next_hop_path_attribute() {
         let nh_bytes: &[u8] = &[192, 168, 1, 1];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result = NextHopPathAttribute::from_wire(ctx, nh_bytes).unwrap();
 
         assert_eq!(result.1 .0, "192.168.1.1".parse::<Ipv4Addr>().unwrap());
@@ -1060,7 +1068,9 @@ mod tests {
     #[test]
     fn test_multi_exit_discriminator_path_attribute() {
         let med_bytes: &[u8] = &[0xca, 0x00, 0x00, 0xbe];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result = MultiExitDiscPathAttribute::from_wire(ctx, med_bytes).unwrap();
 
         assert_eq!(result.1 .0, 3388997822);
@@ -1072,7 +1082,9 @@ mod tests {
     #[test]
     fn test_local_pref_path_attribute() {
         let local_pref_bytes: &[u8] = &[0xca, 0x00, 0x00, 0xbe];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result = LocalPrefPathAttribute::from_wire(ctx, local_pref_bytes).unwrap();
 
         assert_eq!(result.1 .0, 3388997822);
@@ -1090,7 +1102,9 @@ mod tests {
             0xff, 0xf1, 0x73, 0xfb, 0x0f, 0xa0, 0x73, 0xfb, 0x0f, 0xc8, 0x9a, 0x74, 0x0f, 0xa0,
             0x9a, 0x74, 0x0f, 0xb4, 0xdf, 0x1e, 0x07, 0xd0, 0xdf, 0x1e, 0x07, 0xe4,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result = CommunitiesPathAttribute::from_wire(ctx, communities_bytes).unwrap();
         let expected_communities: Vec<(u16, u16)> = vec![
             (0, 0x32bd),
@@ -1127,7 +1141,9 @@ mod tests {
             0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0xdf, 0x1e, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x14,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result = LargeCommunitiesPathAttribute::from_wire(ctx, large_community_bytes).unwrap();
         assert_eq!(result.1.values.len(), 2);
         assert_eq!(result.1.values[0].global_admin, 57118);
@@ -1154,7 +1170,9 @@ mod tests {
             0x20, 0x20, 0x01, 0x0d, 0xb8, // NLRI 1
             0x10, 0xfe, 0x80, // NLRI 2
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result: (&[u8], MPReachNLRIPathAttribute) =
             MPReachNLRIPathAttribute::from_wire(ctx, mp_reach_bytes).unwrap();
         assert_eq!(result.1.afi, Ipv6);
@@ -1184,7 +1202,9 @@ mod tests {
             0x20, 0x20, 0x01, 0x0d, 0xb8, // NLRI 1
             0x10, 0xfe, 0x80, // NLRI 2
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let result: (&[u8], MPUnreachNLRIPathAttribute) =
             MPUnreachNLRIPathAttribute::from_wire(ctx, mp_unreach_bytes).unwrap();
         assert_eq!(result.1.afi, Ipv6);
@@ -1201,7 +1221,7 @@ mod tests {
 
     // Tests the high level dispatching of the path attribute parser
     #[test]
-    fn test_path_attribute_parsing<'a>() {
+    fn test_path_attribute_parsing() {
         let path_attr_bytes: &[u8] = &[
             0x40, 0x01, 0x01, 0x00, 0x50, 0x02, 0x00, 0x1a, 0x02, 0x06, 0x00, 0x00, 0x9a, 0x74,
             0x00, 0x00, 0x62, 0x03, 0x00, 0x00, 0x0b, 0x62, 0x00, 0x00, 0x19, 0x35, 0x00, 0x00,
@@ -1212,10 +1232,14 @@ mod tests {
             0x9a, 0x74, 0x0f, 0xbe,
         ];
 
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let (buf, res): (_, Vec<PathAttribute>) =
-            nom::multi::many0(|buf: &'a [u8]| PathAttribute::from_wire(ctx, buf))(path_attr_bytes)
-                .unwrap();
+            nom::multi::many0(|buf: &'static [u8]| PathAttribute::from_wire(ctx, buf))(
+                path_attr_bytes,
+            )
+            .unwrap();
         assert_eq!(buf.len(), 0);
         let expected_str = "[OriginPathAttribute(IGP), \
                             ASPathAttribute(ASPathAttribute { segments: \

@@ -21,7 +21,7 @@ use nom::IResult;
 
 // ParserContext contains information pertinent to configurations which affect
 // how message parsing is to be handled.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct ParserContext {
     // Whether the peer is RFC6793 compliant.
     pub four_octet_asn: Option<bool>,
@@ -30,13 +30,6 @@ pub struct ParserContext {
 }
 
 impl ParserContext {
-    pub fn new() -> ParserContext {
-        ParserContext {
-            four_octet_asn: None,
-            nlri_mode: None,
-        }
-    }
-
     pub fn four_octet_asn(mut self, v: bool) -> Self {
         self.four_octet_asn = Some(v);
         self

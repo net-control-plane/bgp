@@ -8,6 +8,7 @@ rust-version.workspace = true
 version.workspace      = true
 
 [dependencies]
+axum                         = "0.7.7"
 bgp_packet.workspace         = true
 bgp_server.workspace         = true
 clap.workspace               = true
@@ -33,3 +34,7 @@ path = "src/client/main.rs"
 [[bin]]
 name = "util"
 path = "src/util/main.rs"
+
+[[bin]]
+name = "api_server"
+path = "src/api_server/main.rs"

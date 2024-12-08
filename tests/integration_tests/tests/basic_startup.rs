@@ -29,8 +29,8 @@ use bgp_packet::messages::BGPSubmessage;
 use bgp_packet::traits::ParserContext;
 use bgp_server::bgp_server::Server;
 use bgp_server::config::{PeerConfig, PrefixAnnouncement, ServerConfig};
-use bgp_server::route_server::route_server::bgp_server_admin_service_client::BgpServerAdminServiceClient;
-use bgp_server::route_server::route_server::PeerStatusRequest;
+use bgp_server::route_server::proto::bgp_server_admin_service_client::BgpServerAdminServiceClient;
+use bgp_server::route_server::proto::PeerStatusRequest;
 
 #[macro_use]
 extern crate serial_test;
@@ -151,7 +151,7 @@ async fn test_bgp_listener_known_peer() {
     assert!(conn.write_all(open_msg_bytes).is_ok());
 
     let mut open_buf = vec![0u8; 65536];
-    conn.read(&mut open_buf).unwrap();
+    let _ = conn.read(&mut open_buf).unwrap();
 
     let mut codec = bgp_packet::messages::Codec {
         ctx: ParserContext {
@@ -168,14 +168,14 @@ async fn test_bgp_listener_known_peer() {
     match response_open_msg.unwrap().payload {
         BGPSubmessage::OpenMessage(_open) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
     // Check that the server sends a keepalive after the open message.
 
     let mut ka_buf = vec![0u8; 65536];
-    conn.read(&mut ka_buf).unwrap();
+    let _ = conn.read(&mut ka_buf).unwrap();
     let response_ka_message = codec
         .decode(&mut bytes::BytesMut::from(ka_buf.as_slice()))
         .unwrap();
@@ -183,7 +183,7 @@ async fn test_bgp_listener_known_peer() {
     match response_ka_message.unwrap().payload {
         BGPSubmessage::KeepaliveMessage(_ka) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
@@ -240,7 +240,7 @@ async fn test_bgp_peer_statemachine_outbound_conn() {
     assert!(conn.write_all(open_msg_bytes).is_ok());
 
     let mut open_buf = vec![0u8; 65536];
-    conn.read(&mut open_buf).unwrap();
+    let _ = conn.read(&mut open_buf).unwrap();
 
     let mut codec = bgp_packet::messages::Codec {
         ctx: ParserContext {
@@ -257,14 +257,14 @@ async fn test_bgp_peer_statemachine_outbound_conn() {
     match response_open_msg.unwrap().payload {
         BGPSubmessage::OpenMessage(_open) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
     // Check that the server sends a keepalive after the open message.
 
     let mut ka_buf = vec![0u8; 65536];
-    conn.read(&mut ka_buf).unwrap();
+    let _ = conn.read(&mut ka_buf).unwrap();
     let response_ka_message = codec
         .decode(&mut bytes::BytesMut::from(ka_buf.as_slice()))
         .unwrap();
@@ -272,7 +272,7 @@ async fn test_bgp_peer_statemachine_outbound_conn() {
     match response_ka_message.unwrap().payload {
         BGPSubmessage::KeepaliveMessage(_ka) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
@@ -330,7 +330,7 @@ async fn test_bgp_peer_statemachine_outbound_reconnection() {
     assert!(conn.write_all(open_msg_bytes).is_ok());
 
     let mut open_buf = vec![0u8; 65536];
-    conn.read(&mut open_buf).unwrap();
+    let _ = conn.read(&mut open_buf).unwrap();
 
     let mut codec = bgp_packet::messages::Codec {
         ctx: ParserContext {
@@ -347,14 +347,14 @@ async fn test_bgp_peer_statemachine_outbound_reconnection() {
     match response_open_msg.unwrap().payload {
         BGPSubmessage::OpenMessage(_open) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
     // Check that the server sends a keepalive after the open message.
 
     let mut ka_buf = vec![0u8; 65536];
-    conn.read(&mut ka_buf).unwrap();
+    let _ = conn.read(&mut ka_buf).unwrap();
     let response_ka_message = codec
         .decode(&mut bytes::BytesMut::from(ka_buf.as_slice()))
         .unwrap();
@@ -362,7 +362,7 @@ async fn test_bgp_peer_statemachine_outbound_reconnection() {
     match response_ka_message.unwrap().payload {
         BGPSubmessage::KeepaliveMessage(_ka) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
@@ -383,7 +383,7 @@ async fn test_bgp_peer_statemachine_outbound_reconnection() {
     assert!(conn.write_all(open_msg_bytes).is_ok());
 
     let mut open_buf = vec![0u8; 65536];
-    conn.read(&mut open_buf).unwrap();
+    let _ = conn.read(&mut open_buf).unwrap();
 
     let mut codec = bgp_packet::messages::Codec {
         ctx: ParserContext {
@@ -400,14 +400,14 @@ async fn test_bgp_peer_statemachine_outbound_reconnection() {
     match response_open_msg.unwrap().payload {
         BGPSubmessage::OpenMessage(_open) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
     // Check that the server sends a keepalive after the open message.
 
     let mut ka_buf = vec![0u8; 65536];
-    conn.read(&mut ka_buf).unwrap();
+    let _ = conn.read(&mut ka_buf).unwrap();
     let response_ka_message = codec
         .decode(&mut bytes::BytesMut::from(ka_buf.as_slice()))
         .unwrap();
@@ -415,7 +415,7 @@ async fn test_bgp_peer_statemachine_outbound_reconnection() {
     match response_ka_message.unwrap().payload {
         BGPSubmessage::KeepaliveMessage(_ka) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
@@ -487,7 +487,7 @@ async fn test_bgp_listener_known_peer_inbound_reconnection() {
     assert!(conn.write_all(open_msg_bytes).is_ok());
 
     let mut open_buf = vec![0u8; 65536];
-    conn.read(&mut open_buf).unwrap();
+    let _ = conn.read(&mut open_buf).unwrap();
 
     let mut codec = bgp_packet::messages::Codec {
         ctx: ParserContext {
@@ -504,14 +504,14 @@ async fn test_bgp_listener_known_peer_inbound_reconnection() {
     match response_open_msg.unwrap().payload {
         BGPSubmessage::OpenMessage(_open) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
     // Check that the server sends a keepalive after the open message.
 
     let mut ka_buf = vec![0u8; 65536];
-    conn.read(&mut ka_buf).unwrap();
+    let _ = conn.read(&mut ka_buf).unwrap();
     let response_ka_message = codec
         .decode(&mut bytes::BytesMut::from(ka_buf.as_slice()))
         .unwrap();
@@ -519,7 +519,7 @@ async fn test_bgp_listener_known_peer_inbound_reconnection() {
     match response_ka_message.unwrap().payload {
         BGPSubmessage::KeepaliveMessage(_ka) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
@@ -540,7 +540,7 @@ async fn test_bgp_listener_known_peer_inbound_reconnection() {
 
     let mut open_buf = vec![0u8; 65536];
     conn.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
-    conn.read(&mut open_buf).unwrap();
+    let _ = conn.read(&mut open_buf).unwrap();
 
     let mut codec = bgp_packet::messages::Codec {
         ctx: ParserContext {
@@ -557,7 +557,7 @@ async fn test_bgp_listener_known_peer_inbound_reconnection() {
     match response_open_msg.unwrap().payload {
         BGPSubmessage::OpenMessage(_open) => {}
         _ => {
-            assert!(false);
+            unreachable!();
         }
     }
 
@@ -607,7 +607,7 @@ async fn test_multi_instance_announce() {
     config_b.grpc_addr = Some("[::]:9182".to_owned());
     config_b.peers[0].asn = 65535;
     config_b.peers[0].port = Some(9179);
-    config_b.peers[0].name = "config-a-peer".to_owned();
+    config_b.peers[0].name = "config-a-peer".to_string();
 
     let mut server_a = Server::new(config_a);
     server_a.start(true).await.unwrap();

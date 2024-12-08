@@ -27,11 +27,11 @@ pub enum AddressFamilyIdentifier {
     Ipv6,
 }
 
-impl Into<u16> for AddressFamilyIdentifier {
-    fn into(self) -> u16 {
-        match self {
-            Self::Ipv4 => 1,
-            Self::Ipv6 => 2,
+impl From<AddressFamilyIdentifier> for u16 {
+    fn from(val: AddressFamilyIdentifier) -> Self {
+        match val {
+            AddressFamilyIdentifier::Ipv4 => 1,
+            AddressFamilyIdentifier::Ipv6 => 2,
         }
     }
 }
@@ -50,28 +50,28 @@ impl TryFrom<u16> for AddressFamilyIdentifier {
     }
 }
 
-impl Into<Vec<u8>> for AddressFamilyIdentifier {
-    fn into(self) -> Vec<u8> {
-        match self {
-            Self::Ipv4 => 1_u16.to_be_bytes().to_vec(),
-            Self::Ipv6 => 2_u16.to_be_bytes().to_vec(),
+impl From<AddressFamilyIdentifier> for Vec<u8> {
+    fn from(val: AddressFamilyIdentifier) -> Self {
+        match val {
+            AddressFamilyIdentifier::Ipv4 => 1_u16.to_be_bytes().to_vec(),
+            AddressFamilyIdentifier::Ipv6 => 2_u16.to_be_bytes().to_vec(),
         }
     }
 }
 
 /// Convenience functions to convert AddressFamilyIdentifier into those used by netlink.
-impl Into<netlink_packet_route::AddressFamily> for AddressFamilyIdentifier {
-    fn into(self) -> netlink_packet_route::AddressFamily {
-        match self {
+impl From<AddressFamilyIdentifier> for netlink_packet_route::AddressFamily {
+    fn from(val: AddressFamilyIdentifier) -> Self {
+        match val {
             AddressFamilyIdentifier::Ipv4 => netlink_packet_route::AddressFamily::Inet,
             AddressFamilyIdentifier::Ipv6 => netlink_packet_route::AddressFamily::Inet6,
         }
     }
 }
 
-impl Into<rtnetlink::IpVersion> for AddressFamilyIdentifier {
-    fn into(self) -> rtnetlink::IpVersion {
-        match self {
+impl From<AddressFamilyIdentifier> for rtnetlink::IpVersion {
+    fn from(val: AddressFamilyIdentifier) -> Self {
+        match val {
             AddressFamilyIdentifier::Ipv4 => rtnetlink::IpVersion::V4,
             AddressFamilyIdentifier::Ipv6 => rtnetlink::IpVersion::V6,
         }
@@ -113,14 +113,14 @@ pub enum SubsequentAddressFamilyIdentifier {
     MulticastMplsVpn,
 }
 
-impl Into<u8> for SubsequentAddressFamilyIdentifier {
-    fn into(self) -> u8 {
-        match self {
-            Self::Unicast => 1,
-            Self::Multicast => 2,
-            Self::NlriWithMpls => 4,
-            Self::MplsLabeledVPN => 128,
-            Self::MulticastMplsVpn => 129,
+impl From<SubsequentAddressFamilyIdentifier> for u8 {
+    fn from(val: SubsequentAddressFamilyIdentifier) -> Self {
+        match val {
+            SubsequentAddressFamilyIdentifier::Unicast => 1,
+            SubsequentAddressFamilyIdentifier::Multicast => 2,
+            SubsequentAddressFamilyIdentifier::NlriWithMpls => 4,
+            SubsequentAddressFamilyIdentifier::MplsLabeledVPN => 128,
+            SubsequentAddressFamilyIdentifier::MulticastMplsVpn => 129,
         }
     }
 }

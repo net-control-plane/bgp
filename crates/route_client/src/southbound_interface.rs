@@ -43,24 +43,16 @@ pub trait SouthboundInterface {
 
 /// DummyVerifier is a SouthboundInterface that checks that routes are not added more than
 /// once and not removed when there are none.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct DummyVerifier {
     route_state: HashMap<NLRI, IpAddr>,
-}
-
-impl std::default::Default for DummyVerifier {
-    fn default() -> DummyVerifier {
-        DummyVerifier {
-            route_state: HashMap::default(),
-        }
-    }
 }
 
 #[async_trait]
 impl SouthboundInterface for DummyVerifier {
     async fn get_all_routes(
         &mut self,
-        address_family: AddressFamilyIdentifier,
+        _address_family: AddressFamilyIdentifier,
     ) -> Result<Vec<(NLRI, IpAddr)>> {
         todo!();
     }

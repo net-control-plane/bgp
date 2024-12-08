@@ -12,29 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::data_structures::RouteUpdate;
+use crate::data_structures::RouteWithdraw;
+use crate::path::path_data::PathData;
 use crate::path::path_set::PathSet;
 use crate::path::path_set::PathSource;
 use crate::peer::PeerCommands;
 use crate::rib_manager::RibSnapshot;
 use crate::rib_manager::RouteManagerCommands;
-use crate::route_server::route_server::bgp_server_admin_service_server::BgpServerAdminService;
-use crate::route_server::route_server::route_service_server::RouteService;
-use crate::route_server::route_server::AddressFamily;
-use crate::route_server::route_server::AnnouncementRequest;
-use crate::route_server::route_server::AnnouncementResponse;
-use crate::route_server::route_server::DumpPathsRequest;
-use crate::route_server::route_server::DumpPathsResponse;
-use crate::route_server::route_server::Path;
-use crate::route_server::route_server::Prefix;
-use crate::route_server::route_server::StreamPathsRequest;
+use crate::route_server::proto::bgp_server_admin_service_server::BgpServerAdminService;
+use crate::route_server::proto::route_service_server::RouteService;
+use crate::route_server::proto::AddressFamily;
+use crate::route_server::proto::AnnouncementRequest;
+use crate::route_server::proto::AnnouncementResponse;
+use crate::route_server::proto::DumpPathsRequest;
+use crate::route_server::proto::DumpPathsResponse;
+use crate::route_server::proto::Path;
+use crate::route_server::proto::Prefix;
+use crate::route_server::proto::StreamPathsRequest;
 
 use bgp_packet::constants::AddressFamilyIdentifier;
-use route_server::PeerStatusRequest;
-use route_server::PeerStatusResponse;
+use bgp_packet::nlri::NLRI;
+use bgp_packet::path_attributes::OriginPathAttribute;
+use chrono::Utc;
+use proto::PeerStatusRequest;
+use proto::PeerStatusResponse;
 
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
+use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -44,7 +51,7 @@ use tonic::Response;
 use tonic::Status;
 use tracing::{info, warn};
 
-pub mod route_server {
+pub mod proto {
     tonic::include_proto!("bgpd.grpc");
 }
 
@@ -78,11 +85,8 @@ impl RouteServer {
 
     /// Converts a rib_manager::PathSet into the proto format PathSet using the
     /// appropriate address family.
-    fn transform_pathset<A>(
-        mgr_ps: (u64, PathSet<A>),
-        address_family: i32,
-    ) -> route_server::PathSet {
-        let mut proto_pathset = route_server::PathSet {
+    fn transform_pathset<A>(mgr_ps: (u64, PathSet<A>), address_family: i32) -> proto::PathSet {
+        let mut proto_pathset = proto::PathSet {
             epoch: mgr_ps.0,
             prefix: Some(Prefix {
                 ip_prefix: mgr_ps.1.nlri().prefix.clone(),
@@ -151,7 +155,50 @@ impl BgpServerAdminService for RouteServer {
         let request = request.get_ref();
 
         if let Some(peer) = self.peer_state_machines.get(&request.peer_name) {
-            info!("Would make announcement to peer: {}", &request.peer_name);
+            let prefix = request
+                .prefix
+                .as_ref()
+                .ok_or(Status::invalid_argument("Missing prefix"))?;
+            let nlri = NLRI {
+                afi: AddressFamilyIdentifier::Ipv6,
+                prefix: prefix.ip_prefix.clone(),
+                prefixlen: prefix.prefix_len as u8,
+            };
+
+            if request.add {
+                let path_data = PathData {
+                    origin: OriginPathAttribute::IGP,
+                    nexthop: Vec::default(),
+                    path_source: PathSource::LocallyConfigured,
+                    local_pref: 100,
+                    med: 100,
+                    as_path: vec![210036],
+                    path_attributes: Vec::default(),
+                    learn_time: Utc::now(),
+                };
+                if let Err(e) = peer.send(PeerCommands::Announce(RouteUpdate::Announce((
+                    vec![nlri],
+                    Arc::new(path_data),
+                )))) {
+                    warn!("Failed to send announcement to peer: {}", e);
+                    return Err(Status::internal(format!(
+                        "Failed to send message to PeerStateMachine: {}",
+                        e
+                    )));
+                }
+            } else {
+                let update = PeerCommands::Announce(RouteUpdate::Withdraw(RouteWithdraw {
+                    peer_id: Ipv4Addr::new(0, 0, 0, 0),
+                    prefixes: vec![nlri],
+                }));
+                if let Err(e) = peer.send(update) {
+                    warn!("Failed to send withdrawal to peer: {}", e);
+                    return Err(Status::internal(format!(
+                        "Failed to send message to PeerStateMachine: {}",
+                        e
+                    )));
+                }
+            }
         } else {
             return Err(Status::invalid_argument(format!(
                 "No such peer: {}",
@@ -189,7 +236,7 @@ impl RouteService for RouteServer {
                     Ok(result) => {
                         response.epoch = result.epoch;
                         for pathset in result.routes {
-                            let mut proto_pathset = route_server::PathSet {
+                            let mut proto_pathset = proto::PathSet {
                                 epoch: result.epoch,
                                 prefix: Some(Prefix {
                                     ip_prefix: pathset.nlri().prefix.clone(),
@@ -236,7 +283,7 @@ impl RouteService for RouteServer {
                     Ok(result) => {
                         response.epoch = result.epoch;
                         for pathset in result.routes {
-                            let mut proto_pathset = route_server::PathSet {
+                            let mut proto_pathset = proto::PathSet {
                                 epoch: result.epoch,
                                 prefix: Some(Prefix {
                                     ip_prefix: pathset.nlri().prefix.clone(),
@@ -274,7 +321,7 @@ impl RouteService for RouteServer {
         }
     }
 
-    type StreamPathsStream = ReceiverStream<Result<route_server::PathSet, Status>>;
+    type StreamPathsStream = ReceiverStream<Result<proto::PathSet, Status>>;
 
     async fn stream_paths(
         &self,

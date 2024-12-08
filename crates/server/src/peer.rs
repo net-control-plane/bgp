@@ -19,7 +19,7 @@ use crate::filter_eval::FilterEvaluator;
 use crate::path::path_data::PathData;
 use crate::path::path_set::PathSource;
 use crate::rib_manager::RouteManagerCommands;
-use crate::route_server::route_server::PeerStatus;
+use crate::route_server::proto::PeerStatus;
 
 use bgp_packet::capabilities::{
     BGPCapability, BGPCapabilityTypeValues, BGPCapabilityValue, BGPOpenOptionTypeValues,
@@ -38,10 +38,10 @@ use bgp_packet::messages::NotificationMessage;
 use bgp_packet::messages::OpenMessage;
 use bgp_packet::messages::UpdateMessage;
 use bgp_packet::nlri::NLRI;
-use bgp_packet::path_attributes::ASPathAttribute;
 use bgp_packet::path_attributes::NextHopPathAttribute;
 use bgp_packet::path_attributes::OriginPathAttribute;
 use bgp_packet::path_attributes::PathAttribute;
+use bgp_packet::path_attributes::{ASPathAttribute, MPUnreachNLRIPathAttribute};
 use bgp_packet::path_attributes::{
     LargeCommunitiesPathAttribute, LargeCommunitiesPayload, MPReachNLRIPathAttribute,
 };
@@ -485,7 +485,7 @@ where
                 };
                 let mut buf = BytesMut::new();
                 self.codec.lock().await.encode(bgp_message, &mut buf)?;
-                conn.write(&buf).await?;
+                conn.write_all(&buf).await?;
 
                 // Update state
                 self.state = BGPState::OpenSent;
@@ -530,8 +530,104 @@ where
             }
 
             PeerCommands::Announce(route_update) => match route_update {
-                RouteUpdate::Announce(announcement) => todo!(),
-                RouteUpdate::Withdraw(withdrawal) => todo!(),
+                RouteUpdate::Announce(announcement) => {
+                    // nexthop is not populated in announcement so we set it ourselves here.
+                    let nexthop = if let Some(stream) = &self.tcp_stream {
+                        stream.local_addr()?
+                    } else {
+                        bail!("Cannot send route announcement since tcp stream is closed");
+                    };
+                    let nexthop_attribute: PathAttribute = match nexthop.ip() {
+                        IpAddr::V4(ipv4_addr) => {
+                            // TODO: In the IPv4 case we also need to add the NLRI to the update msg.
+                            PathAttribute::NextHopPathAttribute(NextHopPathAttribute(ipv4_addr))
+                        }
+                        IpAddr::V6(ipv6_addr) => {
+                            PathAttribute::MPReachNLRIPathAttribute(MPReachNLRIPathAttribute {
+                                afi: AddressFamilyIdentifier::Ipv6,
+                                safi: SubsequentAddressFamilyIdentifier::Unicast,
+                                nexthop: ipv6_addr.octets().to_vec(),
+                                nlris: announcement.0.clone(),
+                            })
+                        }
+                    };
+
+                    let mut path_attributes = vec![
+                        PathAttribute::OriginPathAttribute(announcement.1.origin),
+                        ASPathAttribute::from_asns(announcement.1.as_path.clone()),
+                        nexthop_attribute,
+                    ];
+
+                    for nlri in &announcement.0 {
+                        if !self.filter_evaluator.evaluate_out(
+                            &mut path_attributes,
+                            &announcement.1.as_path,
+                            &nlri,
+                        ) {
+                            bail!("Filter rejected NLRI: {}", nlri);
+                        }
+                    }
+
+                    let update_message = UpdateMessage {
+                        path_attributes,
+                        withdrawn_nlri: Vec::default(),
+                        announced_nlri: Vec::default(),
+                    };
+
+                    let bgp_message = BGPMessage {
+                        msg_type: UPDATE_MESSAGE,
+                        payload: BGPSubmessage::UpdateMessage(update_message),
+                    };
+
+                    let mut buf = BytesMut::new();
+                    self.codec
+                        .lock()
+                        .await
+                        .encode(bgp_message, &mut buf)
+                        .map_err(|e| eyre!("failed to encode BGP message: {}", e))?;
+
+                    if let Some(stream) = self.tcp_stream.as_mut() {
+                        stream
+                            .write(&buf)
+                            .await
+                            .map_err(|e| eyre!("Failed to write msg to peer: {}", e))?;
+                    }
+                }
+                RouteUpdate::Withdraw(withdrawal) => {
+                    // Only IPv6 NLRIs are supported for now.
+                    let path_attributes = vec![PathAttribute::MPUnreachNLRIPathAttribute(
+                        MPUnreachNLRIPathAttribute {
+                            afi: AddressFamilyIdentifier::Ipv6,
+                            safi: SubsequentAddressFamilyIdentifier::Unicast,
+                            nlris: withdrawal.prefixes,
+                        },
+                    )];
+
+                    let update_message = UpdateMessage {
+                        path_attributes,
+                        withdrawn_nlri: vec![],
+                        announced_nlri: vec![],
+                    };
+
+                    let bgp_message = BGPMessage {
+                        msg_type: UPDATE_MESSAGE,
+                        payload: BGPSubmessage::UpdateMessage(update_message),
+                    };
+
+                    let mut buf = BytesMut::new();
+                    self.codec
+                        .lock()
+                        .await
+                        .encode(bgp_message, &mut buf)
+                        .map_err(|e| eyre!("failed to encode BGP message: {}", e))?;
+
+                    if let Some(stream) = self.tcp_stream.as_mut() {
+                        stream
+                            .write(&buf)
+                            .await
+                            .map_err(|e| eyre!("Failed to write msg to peer: {}", e))?;
+                    }
+                }
             },
 
             PeerCommands::MessageFromPeer(msg) => match self.handle_msg(msg).await {
@@ -666,7 +762,7 @@ where
         self.codec.lock().await.encode(bgp_msg, &mut buf)?;
         match self.tcp_stream.as_mut() {
             Some(stream) => {
-                stream.write(&buf).await?;
+                stream.write_all(&buf).await?;
             }
             None => warn!("Dropped notification message to peer"),
         }
@@ -927,7 +1023,7 @@ where
                 };
                 let mut buf = BytesMut::new();
                 self.codec.lock().await.encode(keepalive, &mut buf)?;
-                conn.write(buf.as_ref()).await?;
+                conn.write_all(buf.as_ref()).await?;
                 Ok(())
             }
             None => Err(std::io::Error::new(

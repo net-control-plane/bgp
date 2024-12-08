@@ -45,9 +45,9 @@ impl BGPMessageType {
     }
 }
 
-impl Into<u8> for BGPMessageType {
-    fn into(self) -> u8 {
-        self.0
+impl From<BGPMessageType> for u8 {
+    fn from(val: BGPMessageType) -> Self {
+        val.0
     }
 }
 impl From<u8> for BGPMessageType {
@@ -264,7 +264,7 @@ impl Decoder for Codec {
         let len: u16 = byteorder::BigEndian::read_u16(&buf[16..18]);
         if buf.len() < len.into() {
             // Not enough data to read this frame.
-            return Ok(None);
+            Ok(None)
         } else if buf.len() == len as usize {
             // Exactly one message here, parse and clear buf.
             let parse_result = BGPMessage::from_wire(&self.ctx, buf.as_ref());
@@ -306,7 +306,7 @@ impl WritablePacket for BGPMessage {
         {
             let mut tmp: [u8; 2] = [0u8; 2];
             NetworkEndian::write_u16(&mut tmp, self.wire_len(ctx)?);
-            buf.extend_from_slice(&mut tmp);
+            buf.extend_from_slice(&tmp);
         }
         // Type
         buf.push(self.msg_type.into());
@@ -428,9 +428,9 @@ impl WritablePacket for OpenMessage {
         for opt in &self.options {
             count += (*opt).to_wire(ctx)?.len();
         }
-        Ok(count
+        count
             .try_into()
-            .map_err(|_| "overflow in wire_len in OpenMessage")?)
+            .map_err(|_| "overflow in wire_len in OpenMessage")
     }
 }
 
@@ -485,12 +485,12 @@ impl ReadablePacket for UpdateMessage {
 impl WritablePacket for UpdateMessage {
     fn to_wire(&self, ctx: &ParserContext) -> Result<Vec<u8>, &'static str> {
         let mut buf: Vec<u8> = Vec::new();
-        let mut tmp: &mut [u8] = &mut [0u8; 2];
+        let tmp: &mut [u8] = &mut [0u8; 2];
         let mut wd_len: u16 = 0;
         for wd in &self.withdrawn_nlri {
             wd_len += wd.wire_len(ctx)?;
         }
-        NetworkEndian::write_u16(&mut tmp, wd_len);
+        NetworkEndian::write_u16(tmp, wd_len);
         buf.append(&mut tmp.to_vec());
         for wd in &self.withdrawn_nlri {
             buf.extend(wd.to_wire(ctx)?);
@@ -499,7 +499,7 @@ impl WritablePacket for UpdateMessage {
         for pattr in &self.path_attributes {
             pattr_len += pattr.wire_len(ctx)?;
         }
-        NetworkEndian::write_u16(&mut tmp, pattr_len);
+        NetworkEndian::write_u16(tmp, pattr_len);
         buf.extend(tmp.to_vec());
         for pattr in &self.path_attributes {
             buf.extend(pattr.to_wire(ctx)?);
@@ -566,7 +566,9 @@ mod tests {
             0x02, 0x02, 0x00, 0x02, 0x02, 0x46, 0x00, 0x02, 0x06, 0x41, 0x04, 0x00, 0x00, 0x00,
             0x2a,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv4);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv4);
         let (buf, result) = BGPMessage::from_wire(ctx, open_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
@@ -585,7 +587,9 @@ mod tests {
             0x18, 0x02, 0x06, 0x01, 0x04, 0x00, 0x02, 0x00, 0x01, 0x02, 0x02, 0x02, 0x00, 0x02,
             0x02, 0x80, 0x00, 0x02, 0x06, 0x41, 0x04, 0x00, 0x00, 0x22, 0x36,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv4);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv4);
         let (buf, result) = BGPMessage::from_wire(ctx, open_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
@@ -609,14 +613,16 @@ mod tests {
             0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xdf, 0x1e, 0x00, 0x00, 0x00,
             0x14, 0x00, 0x00, 0x00, 0x0a, 0x18, 0xcb, 0x01, 0x4e,
         ];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv4);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv4);
         let (buf, result) = BGPMessage::from_wire(ctx, update_msg_bytes).unwrap();
         assert_eq!(buf.len(), 0);
 
         let want_str = "UpdateMessage [ withdrawn:  announced: 203.1.78.0/24 path attributes: OriginPathAttribute::INCOMPLETEAS Path: { Segment [ Type: AS_SEGMENT 39540 57118 29691 1299 4739  ]] }NextHop: 185.95.219.36Communities: [  1299:35000,  29691:4000,  29691:4021,  39540:4000,  39540:4010,  57118:2000,  57118:2010,  ] LargeCommunities: [ 57118:20:0,  57118:20:10, ] ]";
         assert_eq!(format!("{}", result), want_str);
 
-        let reencoded = result.to_wire(&ctx).unwrap();
+        let reencoded = result.to_wire(ctx).unwrap();
         assert_eq!(&reencoded, update_msg_bytes);
     }
 
@@ -664,7 +670,7 @@ mod tests {
         for b in &buf {
             print!("0x{:02x}, ", b);
         }
-        assert_eq!(buf.as_ref(), update_msg_bytes.as_ref());
+        assert_eq!(buf.as_ref(), update_msg_bytes);
     }
 
     #[test]

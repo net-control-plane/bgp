@@ -72,11 +72,9 @@ impl ReadablePacket for NLRI {
         let (buf, prefix) = take(octet_len)(buf)?;
 
         match ctx.nlri_mode {
-            None => {
-                return Err(Failure(BGPParserError::CustomText(
-                    "nlri_mode not set in the context for NLRI::from_wire".to_string(),
-                )));
-            }
+            None => Err(Failure(BGPParserError::CustomText(
+                "nlri_mode not set in the context for NLRI::from_wire".to_string(),
+            ))),
             Some(afi) => Ok((
                 buf,
                 NLRI {
@@ -115,8 +113,7 @@ impl<'de> Deserialize<'de> for NLRI {
     where
         D: serde::Deserializer<'de>,
     {
-        Self::try_from(String::deserialize(deserializer)?.as_str())
-            .map_err(|e| de::Error::custom(e))
+        Self::try_from(String::deserialize(deserializer)?.as_str()).map_err(de::Error::custom)
     }
 }
 
@@ -207,7 +204,7 @@ impl TryInto<IpAddr> for NLRI {
 impl TryFrom<&str> for NLRI {
     type Error = eyre::ErrReport;
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let parts: Vec<&str> = value.split("/").collect();
+        let parts: Vec<&str> = value.split('/').collect();
         if parts.len() != 2 {
             bail!("Expected ip_addr/prefixlen but got: {}", value);
         }
@@ -217,11 +214,11 @@ impl TryFrom<&str> for NLRI {
         let mut octets: Vec<u8>;
         let afi: AddressFamilyIdentifier;
 
-        if parts[0].contains(":") {
+        if parts[0].contains(':') {
             afi = AddressFamilyIdentifier::Ipv6;
             let addr: Ipv6Addr = Ipv6Addr::from_str(parts[0]).map_err(|e| eyre!(e))?;
             octets = addr.octets().to_vec();
-        } else if parts[0].contains(".") {
+        } else if parts[0].contains('.') {
             afi = AddressFamilyIdentifier::Ipv4;
             let addr: Ipv4Addr = Ipv4Addr::from_str(parts[0]).map_err(|e| eyre!(e))?;
             octets = addr.octets().to_vec();
@@ -237,7 +234,7 @@ impl TryFrom<&str> for NLRI {
             let num_bytes = (prefixlen / 8) + 1;
             let mask = u8::MAX << (8 - (prefixlen % 8));
             octets.truncate(num_bytes.into());
-            if octets.len() > 0 {
+            if !octets.is_empty() {
                 let last_pos = octets.len() - 1;
                 octets[last_pos] &= mask;
             }
@@ -282,7 +279,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use super::NLRI;
-    use crate::constants::AddressFamilyIdentifier::{self, Ipv4, Ipv6};
+    use crate::constants::AddressFamilyIdentifier::{Ipv4, Ipv6};
     use crate::traits::ParserContext;
     use crate::traits::ReadablePacket;
     use crate::traits::WritablePacket;
@@ -290,7 +287,9 @@ mod tests {
     #[test]
     fn test_basic_nlri_v6() {
         let nlri_bytes: &[u8] = &[0x20, 0x20, 0x01, 0xdb, 0x8];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv6);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv6);
         let nlri_res: (&[u8], NLRI) = NLRI::from_wire(ctx, nlri_bytes).unwrap();
         assert_eq!(nlri_res.1.afi, Ipv6);
         assert_eq!(nlri_res.1.prefixlen, 32);
@@ -305,7 +304,9 @@ mod tests {
     #[test]
     fn test_basic_nlri_v4() {
         let nlri_bytes: &[u8] = &[0x18, 192, 168, 1];
-        let ctx = &ParserContext::new().four_octet_asn(true).nlri_mode(Ipv4);
+        let ctx = &ParserContext::default()
+            .four_octet_asn(true)
+            .nlri_mode(Ipv4);
         let nlri_res: (&[u8], NLRI) = NLRI::from_wire(ctx, nlri_bytes).unwrap();
         assert_eq!(nlri_res.1.afi, Ipv4);
         assert_eq!(nlri_res.1.prefixlen, 24);

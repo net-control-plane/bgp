@@ -1,0 +1,1000 @@
+{
+	"identifier": "193.36.105.11",
+	"asn": 210036,
+	"hold_time": 180,
+	"listen_addrs": [
+		"[::]:179"
+	],
+	"grpc_addr": "0.0.0.0:9179",
+	"peers": [
+		{
+			"name": "pr01_rue_rayhaan_net",
+			"ip": "2a0d:d747:100::",
+			"asn": 210036,
+			"afi": "Ipv6",
+			"safi": "Unicast",
+			"local_pref": 50,
+			"announcements": [],
+			"filter_in": [
+				[
+					{
+						"nlri": "::/0",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Reject"
+				],
+				[
+					{
+						"nlri": null,
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				]
+			],
+			"filter_out": [
+				[
+					{
+						"nlri": "2a0d:d740:c001::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c002::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c003::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c004::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c005::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c006::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c007::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c008::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c009::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c010::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c011::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c012::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c013::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c014::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c015::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c016::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c017::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c018::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c019::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c020::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c021::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c022::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c023::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c024::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c025::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c026::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c027::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c028::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c029::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c030::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c031::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c032::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c033::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c034::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c035::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c036::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c037::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c038::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c039::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c040::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c041::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c042::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c043::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c044::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c045::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c046::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c047::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c048::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c049::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c050::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c051::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c052::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c053::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c054::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c055::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c056::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c057::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c058::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c059::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c060::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c061::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c062::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c063::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c064::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c065::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c066::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c067::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c068::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c069::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c070::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c071::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c072::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c073::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c074::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c075::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c076::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c077::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c078::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c079::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c080::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c081::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c082::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c083::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c084::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c085::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c086::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c087::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c088::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c089::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c090::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c091::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c092::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c093::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c094::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c095::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c096::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c097::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c098::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c099::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c100::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c101::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c102::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c103::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c104::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c105::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c106::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c107::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c108::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c109::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c110::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c111::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c112::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c113::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c114::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c115::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c116::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c117::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c118::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": "2a0d:d740:c119::/48",
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Accept"
+				],
+				[
+					{
+						"nlri": null,
+						"origin_asn": null,
+						"large_community": null
+					},
+					"Reject"
+				]
+			]
+		}
+	]
+}
