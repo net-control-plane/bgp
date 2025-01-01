@@ -88,7 +88,7 @@ where
     /// route_add requests updating the nexthop to a particular path if it is not already
     /// the best path.
     pub async fn route_add(&mut self, nlri: &NLRI, nexthop: IpAddr) -> Result<()> {
-        info!(af = ?self.af, %nlri, %nexthop);
+        trace!(af = ?self.af, %nlri, %nexthop);
         // Lookup the path in the Fib, there are three possible outcomes:
         // 1. The route is not yet known, we add it to the FibState and inject it into the kernel,
         // 2. The route is known and has a prior nexthop that needs to be updated

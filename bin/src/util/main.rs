@@ -1,5 +1,6 @@
 use std::net::IpAddr;
 
+use bgp_packet::constants::AddressFamilyIdentifier;
 use bgp_packet::nlri::NLRI;
 use clap::{Parser, Subcommand};
 use eyre::{bail, Result};
@@ -44,6 +45,12 @@ enum Commands {
         #[arg(default_value_t = 201)]
         rt_table: u32,
     },
+    /// DumpRoutes prints all routes from the given routing table ID.
+    DumpRoutes {
+        /// Selects which table to print routes from.
+        #[arg(default_value_t = 201)]
+        rt_table: u32,
+    },
 }
 
 #[tokio::main]
@@ -78,8 +85,23 @@ async fn main() -> Result<()> {
             let nexthop: IpAddr = nexthop.parse()?;
             handle.route_del(prefix, nexthop).await?;
         }
+        Some(Commands::DumpRoutes { rt_table }) => {}
         None => bail!("A subcommand must be specified."),
     };
 
     Ok(())
+}
+
+/// Implements the route dump CLI functionality.
+async fn dump_routes(table: u16) -> Result<()> {
+    let connector = NetlinkConnector::new(Some(table)).await?;
+    let routes = connector.dump_routes(AddressFamilyIdentifier::Ipv6).await?;
+
+    for route in routes {
+        print_route_message(route);
+    }
+}
+
+fn print_route_message(msg: RouteMessage) {
+    // Parse the prefix out
 }

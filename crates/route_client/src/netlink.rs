@@ -139,13 +139,12 @@ impl NetlinkConnector {
     pub async fn dump_routes(
         &mut self,
         address_family: AddressFamilyIdentifier,
-        table: Option<u32>,
     ) -> Result<Vec<RouteMessage>, rtnetlink::Error> {
         let mut req = self.handle.route().get(match address_family {
             AddressFamilyIdentifier::Ipv4 => IpVersion::V4,
             AddressFamilyIdentifier::Ipv6 => IpVersion::V6,
         });
-        if let Some(table_id) = table {
+        if let Some(table_id) = self.table {
             req.message_mut()
                 .attributes
                 .push(RouteAttribute::Table(table_id));
