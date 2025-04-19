@@ -11,7 +11,7 @@ homepage    = "https://rayhaan.ch"
 license     = "Apache-2.0"
 name        = "bgp"
 repository  = "https://github.com/net-control-plane/bgp"
-version     = "0.0.1"
+version     = "0.0.1-alpha1"
 
 [workspace.dependencies]
 # --- Our crates ---

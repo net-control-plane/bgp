@@ -40,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "bgp"
-version = "0.0.1"
+version = "0.0.1-alpha1"
 dependencies = [
  "eyre",
  "tokio",
@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "bgp-packet"
-version = "0.0.1"
+version = "0.0.1-alpha1"
 dependencies = [
  "bitfield",
  "bytes",
