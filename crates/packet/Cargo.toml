@@ -1,0 +1,18 @@
+[package]
+name = "bgp-packet"
+
+description.workspace = true
+edition.workspace     = true
+homepage.workspace    = true
+license.workspace     = true
+repository.workspace  = true
+version.workspace     = true
+
+[dependencies]
+bitfield.workspace   = true
+bytes.workspace      = true
+eyre.workspace       = true
+nom.workspace        = true
+serde.workspace      = true
+serde_repr.workspace = true
+thiserror.workspace  = true

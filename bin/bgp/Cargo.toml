@@ -1,0 +1,11 @@
+[package]
+description        = "A Border Gateway Protocol implementation"
+edition.workspace  = true
+homepage.workspace = true
+license.workspace  = true
+name               = "bgp"
+version.workspace  = true
+
+[dependencies]
+eyre.workspace  = true
+tokio.workspace = true
