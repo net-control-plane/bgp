@@ -1,0 +1,8 @@
+[package]
+edition.workspace = true
+name              = "bgp"
+version.workspace = true
+
+[dependencies]
+eyre.workspace  = true
+tokio.workspace = true

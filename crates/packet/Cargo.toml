@@ -1,0 +1,13 @@
+[package]
+edition = "2024"
+name    = "ferrix-bgp-packet"
+version = "0.1.0"
+
+[dependencies]
+bitfield.workspace   = true
+bytes.workspace      = true
+eyre.workspace       = true
+nom.workspace        = true
+serde.workspace      = true
+serde_repr.workspace = true
+thiserror.workspace  = true
