@@ -1,13 +1,16 @@
 [workspace]
 default-members = ["bin/bgp"]
 members         = ["bin/*", "crates/*"]
+resolver        = "3"
 
 [workspace.package]
 authors     = ["Rayhaan Jaufeerally <rayhaan+git@rayhaan.ch>"]
 description = "A Border Gateway Protocol implementation"
 edition     = "2024"
-license     = "Apache 2"
+homepage    = "https://rayhaan.ch"
+license     = "Apache-2.0"
 name        = "bgp"
+repository  = "https://github.com/net-control-plane/bgp"
 version     = "0.0.1"
 
 [workspace.dependencies]
