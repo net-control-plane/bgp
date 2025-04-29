@@ -9,10 +9,12 @@ repository.workspace  = true
 version.workspace     = true
 
 [dependencies]
-bitfield.workspace   = true
-bytes.workspace      = true
-eyre.workspace       = true
-nom.workspace        = true
-serde.workspace      = true
-serde_repr.workspace = true
-thiserror.workspace  = true
+bitfield.workspace     = true
+bytes.workspace        = true
+eyre.workspace         = true
+nom.workspace          = true
+serde.workspace        = true
+serde_repr.workspace   = true
+strum.workspace        = true
+strum_macros.workspace = true
+thiserror.workspace    = true

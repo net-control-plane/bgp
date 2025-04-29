@@ -4,10 +4,12 @@ use std::str::FromStr;
 
 use bytes::{Buf, BufMut, BytesMut};
 use eyre::{Result, bail};
+use nom::number::complete::be_u8;
+use nom::{IResult, Parser};
 use serde::{Deserialize, Serialize};
 
 use crate::constants::AddressFamilyId;
-use crate::parser::{ParserContext, ToWireError};
+use crate::parser::{BgpParserError, ParserContext, ToWireError};
 
 /// IpPrefix represents some IP address prefix, for a specific AddressFamilyId.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
@@ -34,6 +36,36 @@ impl IpPrefix {
         })
     }
 
+    /// The from_wire parser for `IpPrefix` takes the address family specified in the context and then reads:
+    /// * Prefix length (1 byte)
+    /// * Prefix (variable bytes based on the length)
+    pub fn from_wire<'a>(
+        ctx: &ParserContext,
+        buf: &'a [u8],
+    ) -> IResult<&'a [u8], Self, BgpParserError<&'a [u8]>> {
+        let (buf, length) = be_u8.parse(buf)?;
+        let bytes_needed = ((length + 7) / 8);
+        let (buf, prefix) = nom::bytes::take(bytes_needed)
+            .parse(buf)
+            .map(|(buf, prefix)| (buf, prefix.to_vec()))?;
+
+        Ok((
+            buf,
+            Self {
+                address_family: match ctx.address_family {
+                    Some(afi) => afi,
+                    None => {
+                        return Err(nom::Err::Failure(BgpParserError::CustomText(
+                            "ctx.address_family not set in parser",
+                        )));
+                    }
+                },
+                prefix,
+                length,
+            },
+        ))
+    }
+
     pub fn to_wire(&self, _: &ParserContext, out: &mut BytesMut) -> Result<(), ToWireError> {
         // Verify that there is enough space to write the IpPrefix.
         if out.remaining() < (self.prefix.len() + 1) {
@@ -45,6 +77,10 @@ impl IpPrefix {
         out.put(self.prefix.as_slice());
 
         Ok(())
+    }
+
+    pub fn wire_len(&self, _: &ParserContext) -> Result<u16> {
+        Ok(1 + self.prefix.len() as u16)
     }
 }
 

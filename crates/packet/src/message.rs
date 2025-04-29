@@ -1,4 +1,5 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::path;
 
 use bitfield::bitfield;
 use bytes::BufMut;
@@ -15,10 +16,12 @@ use nom::number::complete::be_u16;
 use nom::number::complete::be_u32;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use strum::EnumDiscriminants;
 
 use crate::constants::AddressFamilyId;
 use crate::constants::SubsequentAfi;
 use crate::ip_prefix::IpPrefix;
+use crate::notification::NotificationMessage;
 use crate::parser::BgpParserError;
 use crate::parser::ParserContext;
 
@@ -78,7 +81,7 @@ pub enum OpenOption {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Capability {
-    /// MultiProtocol Extension (RFC 2858).
+    /// MultiProtocol Extension (RFC 2858).``
     MultiProtocol { afi: u16, safi: u8 },
     /// Route Refresh capability (RFC 2918).
     RouteRefresh {},
@@ -105,11 +108,74 @@ pub enum Capability {
 
 /// Represents a BGP Update message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateMessage {}
+pub struct UpdateMessage {
+    pub withdrawn: Vec<IpPrefix>,
+    pub path_attributes: Vec<PathAttribute>,
+    pub announced: Vec<IpPrefix>,
+}
+
+impl UpdateMessage {
+    pub fn from_wire<'a>(
+        ctx: &ParserContext,
+        buf: &'a [u8],
+    ) -> IResult<&'a [u8], Self, BgpParserError<&'a [u8]>> {
+        /*
+        +-----------------------------------------------------+
+        |   Withdrawn Routes Length (2 octets)                |
+        +-----------------------------------------------------+
+        |   Withdrawn Routes (variable)                       |
+        +-----------------------------------------------------+
+        |   Total Path Attribute Length (2 octets)            |
+        +-----------------------------------------------------+
+        |   Path Attributes (variable)                        |
+        +-----------------------------------------------------+
+        |   Network Layer Reachability Information (variable) |
+        +-----------------------------------------------------+
+        */
+
+        let (buf, withdraw_len) = be_u16.parse(buf)?;
+        let (buf, withdrawn) =
+            nom::bytes::take(withdraw_len)
+                .parse(buf)
+                .and_then(|(buf, withdrawn_bytes)| {
+                    Ok((
+                        buf,
+                        nom::multi::many0(|buf| IpPrefix::from_wire(ctx, buf))
+                            .parse(withdrawn_bytes)?
+                            .1,
+                    ))
+                })?;
+
+        let (buf, path_attr_len) = be_u16.parse(buf)?;
+
+        let (buf, path_attributes) =
+            nom::bytes::take(path_attr_len)
+                .parse(buf)
+                .and_then(|(buf, path_attr_bytes)| {
+                    Ok((
+                        buf,
+                        nom::multi::many0(|buf| PathAttribute::from_wire(ctx, buf))
+                            .parse(path_attr_bytes)?
+                            .1,
+                    ))
+                })?;
+
+        let (buf, announced) = nom::multi::many0(|buf| IpPrefix::from_wire(ctx, buf)).parse(buf)?;
+
+        Ok((
+            buf,
+            Self {
+                withdrawn,
+                path_attributes,
+                announced,
+            },
+        ))
+    }
+}
 
 bitfield! {
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct PathAttributeFlags(u8);
-    impl Debug;
     u8;
     optional, set_optional: 0;
     transitive, set_transitive: 1;
@@ -118,6 +184,8 @@ bitfield! {
 }
 
 #[repr(u8)]
+#[derive(Debug, Clone, EnumDiscriminants, Serialize, Deserialize)]
+#[strum_discriminants(name(PathAttributeTag))]
 pub enum PathAttribute {
     Origin(OriginPathAttribute) = 1,
     ASPath(AsPathAttribute) = 2,
@@ -148,13 +216,84 @@ impl PathAttribute {
         let (buf, attr_flags) = be_u8(buf).map(|(buf, b)| (buf, PathAttributeFlags(b)))?;
         let (buf, type_code) = be_u8(buf)?;
 
+        // Read the length based on the flag that tells us if the length is u16 or u8.
         let (buf, length): (_, u16) = if attr_flags.extended_length() {
             be_u16(buf)?
         } else {
             be_u8(buf).map(|(buf, b)| (buf, b as u16))?
         };
 
-        todo!();
+        let path_attr_parser =
+            |ctx: &ParserContext,
+             buf: &'a [u8],
+             attr_flags: &PathAttributeFlags,
+             type_code: &u8|
+             -> IResult<&'a [u8], PathAttribute, BgpParserError<&'a [u8]>> {
+                match *type_code {
+                    t if (t == PathAttributeTag::Origin as u8) => {
+                        OriginPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::Origin(attr)))
+                    }
+                    t if (t == PathAttributeTag::ASPath as u8) => {
+                        AsPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::ASPath(attr)))
+                    }
+                    t if (t == PathAttributeTag::NextHop as u8) => {
+                        NextHopPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::NextHop(attr)))
+                    }
+                    t if (t == PathAttributeTag::MultiExitDisc as u8) => {
+                        MultiExitDiscPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::MultiExitDisc(attr)))
+                    }
+                    t if (t == PathAttributeTag::LocalPref as u8) => {
+                        LocalPrefPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::LocalPref(attr)))
+                    }
+                    t if (t == PathAttributeTag::AtomicAggregate as u8) => {
+                        AtomicAggregatePathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::AtomicAggregate(attr)))
+                    }
+                    t if (t == PathAttributeTag::Aggregator as u8) => {
+                        AggregatorPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::Aggregator(attr)))
+                    }
+                    t if (t == PathAttributeTag::Communitites as u8) => {
+                        CommunitiesPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::Communitites(attr)))
+                    }
+                    t if (t == PathAttributeTag::MpReachNlri as u8) => {
+                        MpReachNlriPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::MpReachNlri(attr)))
+                    }
+                    t if (t == PathAttributeTag::MpUnreachNlri as u8) => {
+                        MpUnreachNlriPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::MpUnreachNlri(attr)))
+                    }
+                    t if (t == PathAttributeTag::ExtendedCommunities as u8) => {
+                        ExtendedCommunitiesPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::ExtendedCommunities(attr)))
+                    }
+                    t if (t == PathAttributeTag::LargeCommunities as u8) => {
+                        LargeCommunitiesPathAttribute::from_wire(ctx, buf)
+                            .map(|(buf, attr)| (buf, PathAttribute::LargeCommunities(attr)))
+                    }
+                    other => Ok((
+                        &buf[..0],
+                        PathAttribute::UnknownPathAttribute {
+                            flags: attr_flags.clone(),
+                            type_code: other,
+                            payload: buf.to_vec(),
+                        },
+                    )),
+                }
+            };
+
+        let (buf, path_attr) = nom::bytes::take(length)
+            .and_then(|buf| path_attr_parser(ctx, buf, &attr_flags, &type_code))
+            .parse(buf)?;
+
+        Ok((buf, path_attr))
     }
 }
 
@@ -180,16 +319,30 @@ impl TryFrom<u8> for OriginPathAttribute {
     }
 }
 
+impl OriginPathAttribute {
+    pub fn from_wire<'a>(
+        _: &ParserContext,
+        buf: &'a [u8],
+    ) -> IResult<&'a [u8], Self, BgpParserError<&'a [u8]>> {
+        let (buf, value) = be_u8.parse(buf)?;
+        Ok((
+            buf,
+            OriginPathAttribute::try_from(value)
+                .map_err(|e| nom::Err::Failure(BgpParserError::Eyre(e)))?,
+        ))
+    }
+}
+
 /// ASPathAttribute is a well-known mandatory attribute that contains a list of TLV encoded path
 /// segments. Type is either 1 for AS_SET or 2 for AS_SEQUENCE, length is a 1 octet field
 /// containing the number of ASNS and the value contains the ASNs. This is defined in Section 4.3
 /// of RFC4271.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct AsPathAttribute {
     pub segments: Vec<AsPathSegment>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct AsPathSegment {
     /// ordered is true when representing an AS_SEQUENCE, andd false when
     /// representing an AS_SET.
@@ -442,6 +595,22 @@ impl CommunitiesPathAttribute {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct ExtendedCommunitiesPathAttribute {
     pub extended_communities: Vec<ExtendedCommunity>,
+}
+
+impl ExtendedCommunitiesPathAttribute {
+    pub fn from_wire<'a>(
+        ctx: &ParserContext,
+        buf: &'a [u8],
+    ) -> IResult<&'a [u8], Self, BgpParserError<&'a [u8]>> {
+        let (buf, extended_communities) =
+            nom::multi::many1(|buf| ExtendedCommunity::from_wire(ctx, buf)).parse(buf)?;
+        Ok((
+            buf,
+            Self {
+                extended_communities,
+            },
+        ))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -901,5 +1070,12 @@ impl MpUnreachNlriPathAttribute {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NotificationMessage {}
+#[cfg(test)]
+mod tests {
+    use eyre::Result;
+
+    #[test]
+    fn test_parse_update() -> Result<()> {
+        todo!()
+    }
+}

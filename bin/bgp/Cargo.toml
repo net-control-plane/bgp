@@ -8,4 +8,5 @@ version.workspace  = true
 
 [dependencies]
 eyre.workspace  = true
+strum_macros = "0.27.1"
 tokio.workspace = true

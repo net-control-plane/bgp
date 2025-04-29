@@ -18,12 +18,14 @@ version     = "0.0.1-alpha1"
 bgp-packet = { path = "crates/packet" }
 
 # --- General ---
-bitfield   = "0.19.0"
-bytes      = "1.10.1"
-eyre       = "0.6.12"
-nom        = "8.0.0"
-serde      = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-serde_repr = "0.1.20"
-thiserror  = "2.0.12"
-tokio      = { version = "1.44.2", features = ["full"] }
+bitfield     = "0.19.0"
+bytes        = "1.10.1"
+eyre         = "0.6.12"
+nom          = "8.0.0"
+serde        = { version = "1.0.219", features = ["derive"] }
+serde_json   = "1.0.140"
+serde_repr   = "0.1.20"
+strum        = { version = "0.27", features = ["derive"] }
+strum_macros = "0.27.1"
+thiserror    = "2.0.12"
+tokio        = { version = "1.44.2", features = ["full"] }

@@ -39,6 +39,12 @@ pub enum BgpParserError<I> {
     Nom(I, ErrorKind),
 }
 
+impl<I> From<eyre::Report> for BgpParserError<I> {
+    fn from(value: eyre::Report) -> Self {
+        Self::Eyre(value)
+    }
+}
+
 impl<I> ParseError<I> for BgpParserError<I> {
     fn from_error_kind(input: I, kind: ErrorKind) -> Self {
         BgpParserError::Nom(input, kind)
