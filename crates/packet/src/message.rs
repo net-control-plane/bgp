@@ -1,5 +1,4 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path;
 
 use bitfield::bitfield;
 use bytes::BufMut;
@@ -81,7 +80,7 @@ pub enum OpenOption {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Capability {
-    /// MultiProtocol Extension (RFC 2858).``
+    /// MultiProtocol Extension (RFC 2858).
     MultiProtocol { afi: u16, safi: u8 },
     /// Route Refresh capability (RFC 2918).
     RouteRefresh {},
@@ -171,10 +170,29 @@ impl UpdateMessage {
             },
         ))
     }
+
+    pub fn wire_len(&self, ctx: &ParserContext) -> Result<u16> {
+        Ok(2 + self
+            .withdrawn
+            .iter()
+            .flat_map(|w| w.wire_len(ctx))
+            .sum::<u16>()
+            + 2
+            + self
+                .path_attributes
+                .iter()
+                .flat_map(|pa| pa.wire_len(ctx))
+                .sum::<u16>()
+            + self
+                .announced
+                .iter()
+                .flat_map(|p| p.wire_len(ctx))
+                .sum::<u16>())
+    }
 }
 
 bitfield! {
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Default, Clone, Serialize, Deserialize)]
     pub struct PathAttributeFlags(u8);
     u8;
     optional, set_optional: 0;
@@ -295,6 +313,167 @@ impl PathAttribute {
 
         Ok((buf, path_attr))
     }
+
+    pub fn to_wire(&self, ctx: &ParserContext, out: &mut BytesMut) -> Result<()> {
+        // We need to know how long the inner payload is going to be to determine if
+        // we need extended length or not. We also use this opportunity to set the flags.
+        let mut flags = PathAttributeFlags::default();
+
+        let (type_code, inner_len) = match self {
+            PathAttribute::Origin(origin_path_attribute) => {
+                flags.set_transitive(true);
+                (
+                    PathAttributeTag::Origin,
+                    origin_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::ASPath(as_path_attribute) => {
+                flags.set_transitive(true);
+                (PathAttributeTag::ASPath, as_path_attribute.wire_len(ctx)?)
+            }
+            PathAttribute::NextHop(next_hop_path_attribute) => {
+                flags.set_transitive(true);
+                (
+                    PathAttributeTag::NextHop,
+                    next_hop_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::MultiExitDisc(multi_exit_disc_path_attribute) => {
+                flags.set_optional(true);
+                (
+                    PathAttributeTag::MultiExitDisc,
+                    multi_exit_disc_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::LocalPref(local_pref_path_attribute) => {
+                flags.set_optional(true);
+                (
+                    PathAttributeTag::LocalPref,
+                    local_pref_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::AtomicAggregate(atomic_aggregate_path_attribute) => {
+                flags.set_optional(true);
+                (
+                    PathAttributeTag::AtomicAggregate,
+                    atomic_aggregate_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::Aggregator(aggregator_path_attribute) => {
+                flags.set_optional(true);
+                flags.set_transitive(true);
+                (
+                    PathAttributeTag::Aggregator,
+                    aggregator_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::Communitites(communities_path_attribute) => {
+                flags.set_optional(true);
+                flags.set_transitive(true);
+                (
+                    PathAttributeTag::Communitites,
+                    communities_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::MpReachNlri(mp_reach_nlri_path_attribute) => {
+                flags.set_optional(true);
+                (
+                    PathAttributeTag::MpReachNlri,
+                    mp_reach_nlri_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::MpUnreachNlri(mp_unreach_nlri_path_attribute) => {
+                flags.set_optional(true);
+                (
+                    PathAttributeTag::MpUnreachNlri,
+                    mp_unreach_nlri_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::ExtendedCommunities(extended_communities_path_attribute) => {
+                flags.set_optional(true);
+                flags.set_transitive(true);
+                (
+                    PathAttributeTag::ExtendedCommunities,
+                    extended_communities_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::LargeCommunities(large_communities_path_attribute) => {
+                flags.set_optional(true);
+                flags.set_transitive(true);
+                (
+                    PathAttributeTag::LargeCommunities,
+                    large_communities_path_attribute.wire_len(ctx)?,
+                )
+            }
+            PathAttribute::UnknownPathAttribute {
+                flags,
+                type_code,
+                payload,
+            } => todo!(),
+        };
+
+        // If the length is more than 1 byte then we must set the extended length flag.
+        if (inner_len + 2) > 255 {
+            flags.set_extended_length(true);
+        }
+
+        // We can now write the flags, type, length.
+        out.put_u8(flags.0);
+        out.put_u8(type_code as u8);
+
+        if flags.extended_length() {
+            out.put_u16(inner_len);
+        } else {
+            out.put_u8(inner_len as u8);
+        }
+
+        // Now that the header is written we can delegate to writing the body of the Path Attribute.
+        match self {
+            PathAttribute::Origin(origin_path_attribute) => origin_path_attribute.to_wire(ctx, out),
+            PathAttribute::ASPath(as_path_attribute) => as_path_attribute.to_wire(ctx, out),
+            PathAttribute::NextHop(next_hop_path_attribute) => {
+                next_hop_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::MultiExitDisc(multi_exit_disc_path_attribute) => {
+                multi_exit_disc_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::LocalPref(local_pref_path_attribute) => {
+                local_pref_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::AtomicAggregate(atomic_aggregate_path_attribute) => {
+                atomic_aggregate_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::Aggregator(aggregator_path_attribute) => {
+                aggregator_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::Communitites(communities_path_attribute) => {
+                communities_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::MpReachNlri(mp_reach_nlri_path_attribute) => {
+                mp_reach_nlri_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::MpUnreachNlri(mp_unreach_nlri_path_attribute) => {
+                mp_unreach_nlri_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::ExtendedCommunities(extended_communities_path_attribute) => {
+                extended_communities_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::LargeCommunities(large_communities_path_attribute) => {
+                large_communities_path_attribute.to_wire(ctx, out)
+            }
+            PathAttribute::UnknownPathAttribute {
+                flags,
+                type_code,
+                payload,
+            } => todo!(),
+        }?;
+
+        Ok(())
+    }
+
+    pub fn wire_len(&self, ctx: &ParserContext) -> Result<u16> {
+        todo!()
+    }
 }
 
 /// Origin path attribute is a mandatory attribute defined in RFC4271.
@@ -330,6 +509,15 @@ impl OriginPathAttribute {
             OriginPathAttribute::try_from(value)
                 .map_err(|e| nom::Err::Failure(BgpParserError::Eyre(e)))?,
         ))
+    }
+
+    pub fn to_wire(&self, _: &ParserContext, out: &mut BytesMut) -> Result<()> {
+        out.put_u8(*self as u8);
+        Ok(())
+    }
+
+    pub fn wire_len(&self, _: &ParserContext) -> Result<u16> {
+        Ok(1)
     }
 }
 
@@ -451,12 +639,12 @@ impl NextHopPathAttribute {
         Ok((buf, Self(Ipv4Addr::from(ip_u32))))
     }
 
-    pub fn to_wire(&self, out: &mut BytesMut) -> Result<()> {
+    pub fn to_wire(&self, _: &ParserContext, out: &mut BytesMut) -> Result<()> {
         out.put_u32(self.0.into());
         Ok(())
     }
 
-    pub fn wire_len(&self, _: &ParserContext) -> Result<u32> {
+    pub fn wire_len(&self, _: &ParserContext) -> Result<u16> {
         Ok(4)
     }
 }
@@ -610,6 +798,24 @@ impl ExtendedCommunitiesPathAttribute {
                 extended_communities,
             },
         ))
+    }
+
+    pub fn to_wire(&self, ctx: &ParserContext, out: &mut BytesMut) -> Result<()> {
+        self.extended_communities
+            .iter()
+            .map(|c| c.to_wire(ctx, out))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(())
+    }
+
+    pub fn wire_len(&self, ctx: &ParserContext) -> Result<u16> {
+        Ok(self
+            .extended_communities
+            .iter()
+            .map(|c| c.wire_len(ctx))
+            .collect::<Result<Vec<_>>>()?
+            .iter()
+            .sum::<u16>())
     }
 }
 
@@ -878,6 +1084,8 @@ pub enum NlriNextHop {
 }
 
 impl NlriNextHop {
+    // NlriNextHop doesn't have a from_wire since that's handled inline in the parent.
+
     pub fn to_wire(&self, _: &ParserContext, out: &mut BytesMut) -> Result<()> {
         match self {
             NlriNextHop::Ipv4(ipv4_addr) => out.put(&ipv4_addr.octets()[..]),
