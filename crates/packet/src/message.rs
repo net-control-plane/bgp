@@ -413,7 +413,7 @@ impl PathAttribute {
         };
 
         // If the length is more than 1 byte then we must set the extended length flag.
-        if (inner_len + 2) > 255 {
+        if (inner_len + 3) > 255 {
             flags.set_extended_length(true);
         }
 
@@ -472,7 +472,52 @@ impl PathAttribute {
     }
 
     pub fn wire_len(&self, ctx: &ParserContext) -> Result<u16> {
-        todo!()
+        let inner_len = match self {
+            PathAttribute::Origin(origin_path_attribute) => origin_path_attribute.wire_len(ctx),
+            PathAttribute::ASPath(as_path_attribute) => as_path_attribute.wire_len(ctx),
+            PathAttribute::NextHop(next_hop_path_attribute) => {
+                next_hop_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::MultiExitDisc(multi_exit_disc_path_attribute) => {
+                multi_exit_disc_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::LocalPref(local_pref_path_attribute) => {
+                local_pref_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::AtomicAggregate(atomic_aggregate_path_attribute) => {
+                atomic_aggregate_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::Aggregator(aggregator_path_attribute) => {
+                aggregator_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::Communitites(communities_path_attribute) => {
+                communities_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::MpReachNlri(mp_reach_nlri_path_attribute) => {
+                mp_reach_nlri_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::MpUnreachNlri(mp_unreach_nlri_path_attribute) => {
+                mp_unreach_nlri_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::ExtendedCommunities(extended_communities_path_attribute) => {
+                extended_communities_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::LargeCommunities(large_communities_path_attribute) => {
+                large_communities_path_attribute.wire_len(ctx)
+            }
+            PathAttribute::UnknownPathAttribute {
+                flags,
+                type_code,
+                payload,
+            } => todo!(),
+        }?;
+
+        // If extended length is required we have 4 bytes + inner, else 3 bytes + inner.
+        if (inner_len + 3) > 255 {
+            Ok(4 + inner_len)
+        } else {
+            Ok(3 + inner_len)
+        }
     }
 }
 
