@@ -192,17 +192,17 @@ impl UpdateMessage {
 }
 
 bitfield! {
-    #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub struct PathAttributeFlags(u8);
     u8;
-    optional, set_optional: 0;
-    transitive, set_transitive: 1;
-    partial, set_partial: 2;
-    extended_length, set_extended_length: 3;
+    optional, set_optional: 7;
+    transitive, set_transitive: 6;
+    partial, set_partial: 5;
+    extended_length, set_extended_length: 4;
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, EnumDiscriminants, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
 #[strum_discriminants(name(PathAttributeTag))]
 pub enum PathAttribute {
     Origin(OriginPathAttribute) = 1,
@@ -642,7 +642,7 @@ impl AsPathAttribute {
             // Segment type.
             out.put_u8(if segment.ordered { 2 } else { 1 });
             // Segment AS length.
-            out.put_u16(
+            out.put_u8(
                 segment
                     .path
                     .len()
@@ -666,7 +666,6 @@ impl AsPathAttribute {
                 Some(false) => 2 + (2 * segment.path.len()),
                 None => bail!("ParserContext needs four_octet_asn set"),
             };
-            counter += 2 + (4 * segment.path.len());
         }
         Ok(counter as u16)
     }
@@ -1051,7 +1050,7 @@ impl ExtendedCommunity {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LargeCommunitiesPathAttribute {
     pub communities: Vec<LargeCommunity>,
 }
@@ -1078,7 +1077,7 @@ impl LargeCommunitiesPathAttribute {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LargeCommunity {
     pub global_admin: u32,
     pub data_1: u32,
@@ -1115,7 +1114,31 @@ impl LargeCommunity {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl TryFrom<&str> for LargeCommunity {
+    type Error = eyre::Report;
+
+    fn try_from(value: &str) -> Result<Self> {
+        let numbers = value
+            .split(":")
+            .map(|s| s.parse::<u32>().map_err(eyre::Error::from))
+            .collect::<Result<Vec<u32>>>()?;
+
+        if numbers.len() != 3 {
+            bail!(
+                "Expected large community in 3 parts delimited by ':' but got: {}",
+                value
+            );
+        }
+
+        Ok(Self {
+            global_admin: numbers[0],
+            data_1: numbers[1],
+            data_2: numbers[2],
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NlriNextHop {
     /// Represents an IPv4 address nexthop.
     Ipv4(Ipv4Addr),
@@ -1136,8 +1159,8 @@ impl NlriNextHop {
             NlriNextHop::Ipv4(ipv4_addr) => out.put(&ipv4_addr.octets()[..]),
             NlriNextHop::Ipv6(ipv6_addr) => out.put(&ipv6_addr.octets()[..]),
             NlriNextHop::Ipv6WithLl { global, link_local } => {
-                out.put(&global.octets()[..]);
-                out.put(&link_local.octets()[..])
+                out.put(&link_local.octets()[..]);
+                out.put(&global.octets()[..])
             }
         }
 
@@ -1161,12 +1184,12 @@ fn parse_prefix<'a>(
     let (buf, prefix_len) = be_u8(buf)?;
     let byte_len = (prefix_len + 7) / 8;
     let (buf, prefix_bytes) = nom::bytes::take(byte_len as usize).parse(buf)?;
-    let prefix = IpPrefix::new(afi, prefix_bytes.to_vec(), byte_len)
+    let prefix = IpPrefix::new(afi, prefix_bytes.to_vec(), prefix_len)
         .map_err(|e| Failure(BgpParserError::Eyre(e)))?;
     Ok((buf, prefix))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MpReachNlriPathAttribute {
     pub afi: AddressFamilyId,
     pub safi: SubsequentAfi,
@@ -1203,6 +1226,9 @@ impl MpReachNlriPathAttribute {
                 let (buf, nh_bytes) = be_u32(buf)?;
                 let next_hop = NlriNextHop::Ipv4(Ipv4Addr::from(nh_bytes));
 
+                // Read the reserved byte
+                let (buf, _) = be_u8(buf)?;
+
                 let (buf, prefixes) =
                     nom::multi::many0(|buf| parse_prefix(AddressFamilyId::Ipv4, buf)).parse(buf)?;
                 (buf, next_hop, prefixes)
@@ -1232,6 +1258,10 @@ impl MpReachNlriPathAttribute {
                         ))));
                     }
                 };
+
+                // Read the reserved byte
+                let (buf, _) = be_u8(buf)?;
+
                 let (buf, prefixes) =
                     nom::multi::many0(|buf| parse_prefix(AddressFamilyId::Ipv6, buf)).parse(buf)?;
                 (buf, nexthop, prefixes)
@@ -1254,6 +1284,8 @@ impl MpReachNlriPathAttribute {
         out.put_u8(self.safi as u8);
         out.put_u8(self.next_hop.wire_len());
         self.next_hop.to_wire(ctx, out)?;
+        // Write the reserved byte.
+        out.put_u8(0);
         for prefix in &self.prefixes {
             out.put_u8(prefix.length);
             out.put(&prefix.prefix[..]);
@@ -1262,7 +1294,7 @@ impl MpReachNlriPathAttribute {
     }
 
     pub fn wire_len(&self, _: &ParserContext) -> Result<u16> {
-        Ok(4_u16
+        Ok(5_u16
             + self.next_hop.wire_len() as u16
             + self
                 .prefixes
@@ -1272,7 +1304,7 @@ impl MpReachNlriPathAttribute {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MpUnreachNlriPathAttribute {
     pub afi: AddressFamilyId,
     pub safi: SubsequentAfi,
@@ -1325,10 +1357,130 @@ impl MpUnreachNlriPathAttribute {
 
 #[cfg(test)]
 mod tests {
+    use bytes::BytesMut;
     use eyre::Result;
 
-    #[test]
-    fn test_parse_update() -> Result<()> {
-        todo!()
+    use crate::constants::{AddressFamilyId, SubsequentAfi};
+    use crate::message::{
+        AsPathAttribute, AsPathSegment, LargeCommunitiesPathAttribute, LargeCommunity,
+        MpReachNlriPathAttribute, MpUnreachNlriPathAttribute, MultiExitDiscPathAttribute,
+        NlriNextHop, OriginPathAttribute, PathAttribute,
+    };
+    use crate::parser::ParserContext;
+
+    macro_rules! test_path_attribute_roundtrip {
+        ($name:ident, $input_bytes: expr, $ctx: expr, $expected: expr) => {
+            #[test]
+            fn $name() -> Result<()> {
+                let (buf, parsed) = PathAttribute::from_wire($ctx, $input_bytes)?;
+                println!("parsed: {:#?}", parsed);
+
+                assert_eq!(parsed, $expected);
+                assert!(buf.is_empty());
+                let mut out = BytesMut::with_capacity(u16::MAX as usize);
+                parsed.to_wire($ctx, &mut out)?;
+                assert_eq!(out.to_vec(), $input_bytes);
+                Ok(())
+            }
+        };
     }
+
+    test_path_attribute_roundtrip!(
+        test_origin_roundtrip,
+        &[0x40, 0x01, 0x01, 0x00],
+        &ParserContext {
+            four_octet_asn: Some(true),
+            address_family: Some(AddressFamilyId::Ipv6),
+        },
+        PathAttribute::Origin(OriginPathAttribute::IGP)
+    );
+
+    test_path_attribute_roundtrip!(
+        pa_as_path_roundtrip,
+        &[
+            0x40, 0x02, 0x0e, 0x02, 0x03, 0x00, 0x00, 0x1b, 0x1b, 0x00, 0x04, 0x06, 0x84, 0x00,
+            0x03, 0x2e, 0x1e
+        ],
+        &ParserContext {
+            four_octet_asn: Some(true),
+            address_family: Some(AddressFamilyId::Ipv6),
+        },
+        PathAttribute::ASPath(AsPathAttribute {
+            segments: vec![AsPathSegment {
+                ordered: true,
+                path: vec![6939, 263812, 208414]
+            }]
+        })
+    );
+
+    test_path_attribute_roundtrip!(
+        pa_med_roundtrip,
+        &[0x80, 0x04, 0x04, 0x00, 0x00, 0x00, 0x12],
+        &ParserContext {
+            four_octet_asn: Some(true),
+            address_family: Some(AddressFamilyId::Ipv6),
+        },
+        PathAttribute::MultiExitDisc(MultiExitDiscPathAttribute(0x12))
+    );
+
+    test_path_attribute_roundtrip!(
+        pa_large_community_roundtrip,
+        &[
+            0xc0, 0x20, 0x30, 0x00, 0x00, 0xa5, 0xec, 0x00, 0x00, 0x07, 0x77, 0x00, 0x00, 0x00,
+            0x99, 0x00, 0x00, 0xa5, 0xec, 0x00, 0x00, 0x07, 0x78, 0x00, 0x00, 0x00, 0x1c, 0x00,
+            0x00, 0xa5, 0xec, 0x00, 0x00, 0x07, 0x79, 0x00, 0x00, 0x02, 0xf4, 0x00, 0x00, 0xa5,
+            0xec, 0x00, 0x00, 0x07, 0x7a, 0x00, 0x00, 0x00, 0x96
+        ],
+        &ParserContext {
+            four_octet_asn: Some(true),
+            address_family: Some(AddressFamilyId::Ipv6),
+        },
+        PathAttribute::LargeCommunities(LargeCommunitiesPathAttribute {
+            communities: vec![
+                "42476:1911:153".try_into()?,
+                "42476:1912:28".try_into()?,
+                "42476:1913:756".try_into()?,
+                "42476:1914:150".try_into()?
+            ],
+        })
+    );
+
+    test_path_attribute_roundtrip!(
+        pa_mp_reach_nlri_roundtrip,
+        &[
+            0x80, 0x0e, 0x2c, 0x00, 0x02, 0x01, 0x20, 0x20, 0x01, 0x07, 0xf8, 0x00, 0x24, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xaa, 0xfe, 0x80, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0xfe, 0x0a, 0x81, 0xff, 0xfe, 0xfa, 0x01, 0x15, 0x00, 0x30, 0x2a,
+            0x0e, 0xac, 0xc0, 0xac, 0x79,
+        ],
+        &ParserContext {
+            four_octet_asn: Some(true),
+            address_family: Some(AddressFamilyId::Ipv6),
+        },
+        PathAttribute::MpReachNlri(MpReachNlriPathAttribute {
+            afi: AddressFamilyId::Ipv6,
+            safi: SubsequentAfi::Unicast,
+            next_hop: NlriNextHop::Ipv6WithLl {
+                global: "fe80::fe0a:81ff:fefa:115".parse()?,
+                link_local: "2001:7f8:24::aa".parse()?,
+            },
+            prefixes: vec!["2a0e:acc0:ac79::/48".try_into()?],
+        })
+    );
+
+    test_path_attribute_roundtrip!(
+        pa_mp_unreach_nlri_roundtrip,
+        &[
+            0x80, 0x0f, 0x08, 0x00, 0x02, 0x01, 0x20, 0x2a, 0x01, 0x50, 0xa1
+        ],
+        &ParserContext {
+            four_octet_asn: Some(true),
+            address_family: Some(AddressFamilyId::Ipv6),
+        },
+        PathAttribute::MpUnreachNlri(MpUnreachNlriPathAttribute {
+            afi: AddressFamilyId::Ipv6,
+            safi: SubsequentAfi::Unicast,
+            prefixes: vec!["2a01:50a1::/32".try_into()?],
+        })
+    );
 }
